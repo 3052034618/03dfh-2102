@@ -17,7 +17,7 @@
             <p class="subtitle">让开局前的气氛先嗨起来！</p>
         </header>
 
-        <nav class="nav-tabs">
+        <nav class="nav-tabs" id="navTabs">
             <button class="nav-btn active" data-module="create">🏠 创建房间</button>
             <button class="nav-btn" data-module="join">🎲 玩家抽签</button>
             <button class="nav-btn" data-module="surprise">🎁 生日彩蛋</button>
@@ -26,7 +26,7 @@
         <main class="main-content">
 
             <section class="module active" id="module-create">
-                <div class="card">
+                <div class="card" id="createFormCard">
                     <h2 class="card-title">✨ 发起人创建房间</h2>
                     
                     <div class="form-group">
@@ -47,12 +47,6 @@
                                 <option value="10">10人</option>
                             </select>
                         </div>
-                        <div class="form-group">
-                            <label>🎂 生日主角</label>
-                            <select id="birthdayPlayer">
-                                <option value="none">-- 先不指定 --</option>
-                            </select>
-                        </div>
                     </div>
 
                     <div class="form-group">
@@ -66,16 +60,9 @@
                         <div class="checkbox-group">
                             <label class="checkbox-label">
                                 <input type="checkbox" id="allowCrossPlay" checked>
-                                <span>允许反串</span>
+                                <span>允许反串（关闭后严格按性别匹配）</span>
                             </label>
                         </div>
-                    </div>
-
-                    <div class="form-group">
-                        <label>⚠️ 特殊角色避开（情侣/社恐）</label>
-                        <div id="avoidRules" class="avoid-rules"></div>
-                        <button class="btn btn-secondary" onclick="addAvoidRule()">+ 添加避开规则</button>
-                        <small class="form-hint">比如：玩家A和玩家B不要抽到情侣角色</small>
                     </div>
 
                     <div class="form-group">
@@ -99,12 +86,13 @@
                     <button class="btn btn-primary btn-large" onclick="createRoom()">🎉 创建房间</button>
                 </div>
 
-                <div class="card" id="roomCreatedCard" style="display: none;">
+                <div class="card" id="roomManageCard" style="display: none;">
                     <h2 class="card-title">✅ 房间创建成功！</h2>
                     <div class="room-info">
                         <p><strong>房间号：</strong><span id="roomId" class="room-id"></span></p>
                         <p><strong>剧本：</strong><span id="roomScriptName"></span></p>
                         <p><strong>人数：</strong><span id="roomPlayerCount"></span>人</p>
+                        <p><strong>反串：</strong><span id="roomCrossPlay"></span></p>
                     </div>
                     
                     <div class="qrcode-section">
@@ -113,14 +101,38 @@
                     </div>
 
                     <div class="form-group">
-                        <label>👥 已加入玩家</label>
-                        <div id="joinedPlayersList" class="joined-players"></div>
+                        <label>👥 已加入玩家 (<span id="creatorPlayerCount">0</span>/<span id="creatorPlayerTotal">0</span>)</label>
+                        <div id="creatorPlayerList" class="joined-players"></div>
+                    </div>
+
+                    <div class="form-group" id="birthdaySelectGroup" style="display: none;">
+                        <label>🎂 指定生日主角</label>
+                        <p class="form-hint">从已加入的玩家中指定寿星，只有此人抽签时才会触发蛋糕动画和祝福弹幕</p>
+                        <div id="birthdayPlayerSelect" class="birthday-player-select"></div>
+                    </div>
+
+                    <div class="form-group" id="avoidRulesGroup" style="display: none;">
+                        <label>⚠️ 设置角色避开规则</label>
+                        <p class="form-hint">为特定玩家指定需要避开的角色标签，抽签时严格生效</p>
+                        <div id="creatorAvoidRules" class="avoid-rules-list"></div>
+                        <button class="btn btn-secondary btn-small" onclick="addCreatorAvoidRule()">+ 添加避开规则</button>
+                    </div>
+
+                    <div class="form-group" id="genderValidationMsg" style="display: none;">
+                        <div class="validation-warning" id="genderWarningText"></div>
                     </div>
 
                     <div class="form-row">
-                        <button class="btn btn-primary" onclick="startLottery()">🎲 开始抽签</button>
+                        <button class="btn btn-primary" id="startLotteryBtn" onclick="startLottery()">🎲 开始抽签</button>
                         <button class="btn btn-secondary" onclick="copyRoomLink()">📋 复制链接</button>
                     </div>
+                </div>
+
+                <div class="card" id="lotteryDoneCard" style="display: none;">
+                    <h2 class="card-title">🎉 抽签已完成！</h2>
+                    <p class="info-text">所有玩家已分配角色，请各位在自己的设备上查看结果。</p>
+                    <div id="creatorResultList" class="result-list"></div>
+                    <button class="btn btn-secondary" onclick="copyRoomLink()">📋 再复制一次链接</button>
                 </div>
             </section>
 
@@ -131,11 +143,15 @@
                         <label>🏠 房间号</label>
                         <input type="text" id="joinRoomId" placeholder="请输入6位房间号" maxlength="6">
                     </div>
-                    <button class="btn btn-primary" onclick="joinRoom()">🚪 进入房间</button>
+                    <button class="btn btn-primary btn-large" onclick="joinRoom()">🚪 进入房间</button>
                 </div>
 
                 <div class="card" id="playerInfoCard" style="display: none;">
                     <h2 class="card-title">✨ 填写你的信息</h2>
+                    <div class="form-group">
+                        <label>🎬 剧本</label>
+                        <p class="info-text" id="joinScriptName"></p>
+                    </div>
                     <div class="form-group">
                         <label>👋 你的昵称</label>
                         <input type="text" id="playerNickname" placeholder="叫我什么好呢？" maxlength="15">
@@ -324,6 +340,14 @@
                 <p class="big-slogan" id="bigSloganText"></p>
                 <button class="btn btn-primary btn-large" onclick="closeSloganModal()">✅ 已喊出！</button>
             </div>
+        </div>
+    </div>
+
+    <div class="modal" id="genderErrorModal" style="display: none;">
+        <div class="modal-content">
+            <h2 class="modal-error-title">⚠️ 性别匹配失败</h2>
+            <p class="modal-error-text" id="genderErrorText"></p>
+            <button class="btn btn-primary" onclick="closeGenderErrorModal()">我知道了</button>
         </div>
     </div>
 

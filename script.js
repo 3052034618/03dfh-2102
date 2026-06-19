@@ -1,38 +1,16 @@
-let currentRoom = null;
-let currentPlayer = null;
-let pollingInterval = null;
+const API = '';
+
+let currentRoomId = null;
+let creatorToken = null;
+let currentPlayerId = null;
+let creatorPollingInterval = null;
+let playerPollingInterval = null;
 
 const roleTags = ['🔥高能', '😂搞笑', '🔍推理', '😌边缘', '💧情感', '💕情侣', '🎭任意'];
 const genderOptions = [
     { value: 'any', label: '不限' },
     { value: 'male', label: '♂男' },
     { value: 'female', label: '♀女' }
-];
-
-const costumeHints = [
-    '建议穿着复古风服装，搭配精致配饰',
-    '可以尝试深色系穿搭，营造神秘氛围',
-    '休闲风即可，舒适最重要',
-    '建议穿正装，显得气质出众',
-    '可以穿得活泼鲜艳一些',
-    '简约风格就好，不要太花哨',
-    '建议穿国风元素的衣服',
-    '可以尝试暗黑系风格',
-    '甜美可爱风格最适合',
-    '酷炫机车风了解一下'
-];
-
-const entryLines = [
-    '"各位好，我是这个故事的见证者。"',
-    '"来了？坐，好戏才刚刚开始。"',
-    '"别来无恙啊，各位。"',
-    '"今天，我们每个人都有秘密。"',
-    '"我知道你们都在想什么..."',
-    '"真相，往往藏在最不起眼的地方。"',
-    '"让我们开始吧，时间不多了。"',
-    '"诸位，请允许我自我介绍一下。"',
-    '"命运的齿轮，已经开始转动。"',
-    '"你们可以叫我...一个过客。"'
 ];
 
 const birthdayDanmakuMessages = [
@@ -48,7 +26,10 @@ const birthdayDanmakuMessages = [
     '💝 祝福最可爱的你！'
 ];
 
-const avatarEmojis = ['🎭', '👑', '🎨', '🎪', '🎯', '🎸', '📚', '💎', '🌹', '🦋', '🐱', '🐶', '🦊', '🐰', '🐻'];
+const defaultRoleNames = [
+    '大太太', '二少爷', '三小姐', '管家', '司机', '厨子',
+    '律师', '医生', '记者', '侦探'
+];
 
 document.addEventListener('DOMContentLoaded', function() {
     initModuleSwitch();
@@ -61,14 +42,12 @@ document.addEventListener('DOMContentLoaded', function() {
 function initModuleSwitch() {
     const navBtns = document.querySelectorAll('.nav-btn');
     const modules = document.querySelectorAll('.module');
-    
+
     navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const targetModule = btn.dataset.module;
-            
             navBtns.forEach(b => b.classList.remove('active'));
             modules.forEach(m => m.classList.remove('active'));
-            
             btn.classList.add('active');
             document.getElementById(`module-${targetModule}`).classList.add('active');
         });
@@ -76,579 +55,553 @@ function initModuleSwitch() {
 }
 
 function initPlayerCountChange() {
-    const playerCountSelect = document.getElementById('playerCount');
-    playerCountSelect.addEventListener('change', initDefaultRoles);
+    document.getElementById('playerCount').addEventListener('change', initDefaultRoles);
 }
 
 function initDefaultRoles() {
     const count = parseInt(document.getElementById('playerCount').value);
     const container = document.getElementById('rolesContainer');
     container.innerHTML = '';
-    
-    const defaultNames = [
-        '大太太', '二少爷', '三小姐', '管家', '司机', '厨子',
-        '律师', '医生', '记者', '侦探'
-    ];
-    
     for (let i = 0; i < count; i++) {
-        addRoleRow(defaultNames[i] || `角色${i + 1}`);
+        addRoleRow(defaultRoleNames[i] || `角色${i + 1}`);
     }
-    
-    updateBirthdayPlayerSelect();
 }
 
 function addRoleRow(defaultName = '') {
     const container = document.getElementById('rolesContainer');
     const row = document.createElement('div');
     row.className = 'role-row';
-    
-    const tagOptions = roleTags.map(tag => 
-        `<option value="${tag}">${tag}</option>`
-    ).join('');
-    
-    const genderOptionsHtml = genderOptions.map(opt =>
-        `<option value="${opt.value}">${opt.label}</option>`
-    ).join('');
-    
+
+    const tagOpts = roleTags.map(t => `<option value="${t}">${t}</option>`).join('');
+    const genderOpts = genderOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
+
     row.innerHTML = `
         <input type="text" placeholder="角色名" value="${defaultName}" maxlength="15">
-        <select class="gender-select">
-            ${genderOptionsHtml}
-        </select>
-        <select class="tag-select">
-            ${tagOptions}
-        </select>
+        <select class="gender-select">${genderOpts}</select>
+        <select class="tag-select">${tagOpts}</select>
         <button class="remove-btn" onclick="removeRoleRow(this)">×</button>
     `;
-    
     container.appendChild(row);
-    updateBirthdayPlayerSelect();
 }
 
 function removeRoleRow(btn) {
     const container = document.getElementById('rolesContainer');
     if (container.children.length > 4) {
         btn.parentElement.remove();
-        updateBirthdayPlayerSelect();
     } else {
         showToast('至少需要4个角色哦~', 'error');
     }
 }
 
-function updateBirthdayPlayerSelect() {
-    const select = document.getElementById('birthdayPlayer');
-    const roleRows = document.querySelectorAll('#rolesContainer .role-row input');
-    
-    let currentValue = select.value;
-    
-    select.innerHTML = '<option value="none">-- 先不指定 --</option>';
-    
-    roleRows.forEach((input, index) => {
-        const option = document.createElement('option');
-        option.value = index;
-        option.textContent = `寿星：${input.value || `角色${index + 1}`}`;
-        select.appendChild(option);
-    });
-    
-    if (currentValue && currentValue !== 'none') {
-        select.value = currentValue;
-    }
-}
-
-function addAvoidRule() {
-    const container = document.getElementById('avoidRules');
-    const row = document.createElement('div');
-    row.className = 'avoid-rule-row';
-    
-    row.innerHTML = `
-        <select class="avoid-player">
-            <option value="">选择玩家</option>
-        </select>
-        <span style="color: var(--text-light);">不要和</span>
-        <select class="avoid-player">
-            <option value="">选择玩家</option>
-        </select>
-        <select class="avoid-tag">
-            <option value="any">抽到同一类型角色</option>
-            <option value="💕情侣">抽到情侣角色</option>
-            <option value="🔥高能">都抽到高能位</option>
-        </select>
-        <button class="remove-btn" onclick="removeAvoidRule(this)">×</button>
-    `;
-    
-    container.appendChild(row);
-    updateAvoidPlayerSelects();
-}
-
-function removeAvoidRule(btn) {
-    btn.parentElement.remove();
-}
-
-function updateAvoidPlayerSelects() {
-    const roleRows = document.querySelectorAll('#rolesContainer .role-row input');
-    const roleNames = Array.from(roleRows).map((input, i) => input.value || `角色${i + 1}`);
-    
-    const selects = document.querySelectorAll('.avoid-player');
-    selects.forEach(select => {
-        const currentValue = select.value;
-        select.innerHTML = '<option value="">选择玩家</option>';
-        roleNames.forEach((name, i) => {
-            const option = document.createElement('option');
-            option.value = i;
-            option.textContent = name;
-            select.appendChild(option);
-        });
-        if (currentValue) select.value = currentValue;
-    });
-}
-
-function createRoom() {
+async function createRoom() {
     const scriptName = document.getElementById('scriptName').value.trim();
     if (!scriptName) {
         showToast('请输入剧本名称~', 'error');
         return;
     }
-    
+
     const playerCount = parseInt(document.getElementById('playerCount').value);
     const allowCrossPlay = document.getElementById('allowCrossPlay').checked;
-    const birthdayPlayerIndex = document.getElementById('birthdayPlayer').value;
     const birthdayMessage = document.getElementById('birthdayMessage').value.trim();
     const openingSlogan = document.getElementById('openingSlogan').value.trim();
     const surpriseTask = document.getElementById('surpriseTask').value.trim();
-    
+
     const roles = [];
     const roleRows = document.querySelectorAll('#rolesContainer .role-row');
-    let hasEmptyRole = false;
-    
     roleRows.forEach((row, index) => {
         const nameInput = row.querySelector('input');
         const genderSelect = row.querySelector('.gender-select');
         const tagSelect = row.querySelector('.tag-select');
-        
-        const name = nameInput.value.trim();
-        if (!name) hasEmptyRole = true;
-        
         roles.push({
-            id: index,
-            name: name || `角色${index + 1}`,
+            name: nameInput.value.trim() || `角色${index + 1}`,
             gender: genderSelect.value,
-            tag: tagSelect.value,
-            costume: costumeHints[Math.floor(Math.random() * costumeHints.length)],
-            line: entryLines[Math.floor(Math.random() * entryLines.length)],
-            avatar: avatarEmojis[index % avatarEmojis.length]
+            tag: tagSelect.value
         });
     });
-    
-    if (hasEmptyRole) {
-        showToast('有角色名字为空，已自动填充~', 'info');
-    }
-    
-    const avoidRules = [];
-    const avoidRows = document.querySelectorAll('#avoidRules .avoid-rule-row');
-    avoidRows.forEach(row => {
-        const selects = row.querySelectorAll('.avoid-player');
-        const tagSelect = row.querySelector('.avoid-tag');
-        const p1 = selects[0].value;
-        const p2 = selects[1].value;
-        const tag = tagSelect.value;
-        
-        if (p1 !== '' && p2 !== '' && p1 !== p2) {
-            avoidRules.push({
-                player1: parseInt(p1),
-                player2: parseInt(p2),
-                tag: tag
+
+    try {
+        const res = await fetch(`${API}/api/rooms`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                scriptName, playerCount, allowCrossPlay, roles,
+                birthdayMessage, openingSlogan, surpriseTask
+            })
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || '创建失败', 'error');
+            return;
+        }
+
+        currentRoomId = data.roomId;
+        creatorToken = data.creatorToken;
+
+        document.getElementById('createFormCard').style.display = 'none';
+        document.getElementById('roomManageCard').style.display = 'block';
+
+        document.getElementById('roomId').textContent = data.roomId;
+        document.getElementById('roomScriptName').textContent = scriptName;
+        document.getElementById('roomPlayerCount').textContent = playerCount;
+        document.getElementById('roomCrossPlay').textContent = allowCrossPlay ? '允许' : '不允许';
+        document.getElementById('creatorPlayerTotal').textContent = playerCount;
+
+        generateQRCode(data.roomId);
+        startCreatorPolling();
+
+        if (birthdayMessage || openingSlogan || surpriseTask) {
+            saveSurpriseRecord({
+                scriptName,
+                birthdayPlayer: '待指定',
+                message: birthdayMessage,
+                slogan: openingSlogan,
+                task: surpriseTask,
+                time: new Date().toLocaleString('zh-CN')
             });
         }
-    });
-    
-    const roomId = generateRoomId();
-    
-    currentRoom = {
-        id: roomId,
-        scriptName,
-        playerCount,
-        allowCrossPlay,
-        roles,
-        avoidRules,
-        birthdayPlayerIndex: birthdayPlayerIndex === 'none' ? -1 : parseInt(birthdayPlayerIndex),
-        birthdayMessage,
-        openingSlogan,
-        surpriseTask,
-        players: [],
-        status: 'waiting',
-        createdAt: Date.now(),
-        lotteryResults: null
-    };
-    
-    saveRoom(currentRoom);
-    
-    document.querySelector('#module-create .card').style.display = 'none';
-    document.getElementById('roomCreatedCard').style.display = 'block';
-    
-    document.getElementById('roomId').textContent = roomId;
-    document.getElementById('roomScriptName').textContent = scriptName;
-    document.getElementById('roomPlayerCount').textContent = playerCount;
-    
-    generateQRCode(roomId);
-    
-    startPolling();
-    updateJoinedPlayersList();
-    
-    if (birthdayMessage || openingSlogan || surpriseTask) {
-        saveSurpriseRecord({
-            scriptName,
-            birthdayPlayer: birthdayPlayerIndex === 'none' ? '未指定' : roles[parseInt(birthdayPlayerIndex)].name,
-            message: birthdayMessage,
-            slogan: openingSlogan,
-            task: surpriseTask,
-            time: new Date().toLocaleString('zh-CN')
-        });
-    }
-    
-    showToast('🎉 房间创建成功！', 'success');
-    triggerConfetti();
-}
 
-function generateRoomId() {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+        showToast('🎉 房间创建成功！', 'success');
+        triggerConfetti();
+
+    } catch (e) {
+        showToast('网络错误，请检查服务器~', 'error');
+        console.error(e);
+    }
 }
 
 function generateQRCode(roomId) {
     const url = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
     const qrcodeContainer = document.getElementById('qrcode');
     qrcodeContainer.innerHTML = '';
-    
+
     if (window.QRCode) {
         new QRCode(qrcodeContainer, {
-            text: url,
-            width: 150,
-            height: 150,
-            colorDark: '#2d3436',
-            colorLight: '#ffffff',
+            text: url, width: 150, height: 150,
+            colorDark: '#2d3436', colorLight: '#ffffff',
             correctLevel: QRCode.CorrectLevel.H
         });
     } else {
-        qrcodeContainer.innerHTML = `
-            <div style="padding: 20px; color: var(--text-light);">
-                <p>房间链接：</p>
-                <p style="font-size: 12px; word-break: break-all;">${url}</p>
-            </div>
-        `;
+        qrcodeContainer.innerHTML = `<div style="padding:20px;color:var(--text-light);font-size:12px;word-break:break-all;">${url}</div>`;
     }
 }
 
-function saveRoom(room) {
-    const rooms = JSON.parse(localStorage.getItem('birthdayMurderRooms') || '{}');
-    rooms[room.id] = room;
-    localStorage.setItem('birthdayMurderRooms', JSON.stringify(rooms));
-}
-
-function getRoom(roomId) {
-    const rooms = JSON.parse(localStorage.getItem('birthdayMurderRooms') || '{}');
-    return rooms[roomId] || null;
-}
-
-function updateJoinedPlayersList() {
-    if (!currentRoom) return;
-    
-    const container = document.getElementById('joinedPlayersList');
-    container.innerHTML = '';
-    
-    currentRoom.players.forEach((player, index) => {
-        const chip = document.createElement('div');
-        chip.className = 'player-chip';
-        
-        const isBirthday = currentRoom.birthdayPlayerIndex !== -1 && index === currentRoom.birthdayPlayerIndex;
-        if (isBirthday) {
-            chip.classList.add('birthday');
-            chip.innerHTML = `<span>🎂</span><span>${player.nickname}</span>`;
-        } else {
-            chip.innerHTML = `<span>👤</span><span>${player.nickname}</span>`;
-        }
-        
-        container.appendChild(chip);
-    });
-    
-    if (currentRoom.players.length === 0) {
-        container.innerHTML = '<small style="color: var(--text-light);">等待玩家加入...</small>';
-    }
-}
-
-function startPolling() {
-    if (pollingInterval) clearInterval(pollingInterval);
-    
-    pollingInterval = setInterval(() => {
-        if (!currentRoom) return;
-        
-        const freshRoom = getRoom(currentRoom.id);
-        if (freshRoom) {
-            currentRoom = freshRoom;
-            
-            updateJoinedPlayersList();
-            
-            if (currentRoom.status === 'lottery-done') {
-                if (currentPlayer) {
-                    showLotteryResult();
-                }
-                clearInterval(pollingInterval);
+function startCreatorPolling() {
+    if (creatorPollingInterval) clearInterval(creatorPollingInterval);
+    creatorPollingInterval = setInterval(async () => {
+        if (!currentRoomId) return;
+        try {
+            const res = await fetch(`${API}/api/rooms/${currentRoomId}`);
+            const room = await res.json();
+            if (room.status === 'lottery-done') {
+                showCreatorResults(room);
+                clearInterval(creatorPollingInterval);
+                return;
             }
-        }
-    }, 1000);
+            updateCreatorPlayerList(room);
+            checkGenderValidation(room);
+        } catch (e) { }
+    }, 2000);
 }
 
-function startLottery() {
-    if (!currentRoom) return;
-    
-    if (currentRoom.players.length < currentRoom.playerCount) {
-        showToast(`还差 ${currentRoom.playerCount - currentRoom.players.length} 位玩家哦~`, 'error');
+function updateCreatorPlayerList(room) {
+    document.getElementById('creatorPlayerCount').textContent = room.players.length;
+    const container = document.getElementById('creatorPlayerList');
+    container.innerHTML = '';
+
+    if (room.players.length === 0) {
+        container.innerHTML = '<small style="color:var(--text-light);">等待玩家加入...</small>';
+        document.getElementById('birthdaySelectGroup').style.display = 'none';
+        document.getElementById('avoidRulesGroup').style.display = 'none';
         return;
     }
-    
-    const results = assignRoles(currentRoom);
-    currentRoom.lotteryResults = results;
-    currentRoom.status = 'lottery-done';
-    saveRoom(currentRoom);
-    
-    showToast('🎲 抽签开始！', 'success');
-}
 
-function assignRoles(room) {
-    const players = [...room.players];
-    const roles = [...room.roles];
-    const results = {};
-    
-    const shuffledPlayers = players.map((p, i) => ({ ...p, originalIndex: i }));
-    for (let i = shuffledPlayers.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffledPlayers[i], shuffledPlayers[j]] = [shuffledPlayers[j], shuffledPlayers[i]];
-    }
-    
-    const assignedRoles = new Set();
-    
-    if (room.birthdayPlayerIndex !== -1 && room.birthdayPlayerIndex < players.length) {
-        const birthdayPlayer = players[room.birthdayPlayerIndex];
-        let bestRole = null;
-        let bestScore = -1;
-        
-        roles.forEach((role, roleIndex) => {
-            if (assignedRoles.has(roleIndex)) return;
-            const score = calculateMatchScore(birthdayPlayer, role, room);
-            if (score > bestScore) {
-                bestScore = score;
-                bestRole = { role, roleIndex };
-            }
-        });
-        
-        if (bestRole) {
-            results[room.birthdayPlayerIndex] = bestRole.role;
-            assignedRoles.add(bestRole.roleIndex);
+    room.players.forEach(player => {
+        const chip = document.createElement('div');
+        chip.className = 'player-chip';
+        const isBirthday = room.birthdayPlayerId === player.id;
+        if (isBirthday) {
+            chip.classList.add('birthday');
+            chip.innerHTML = `<span>🎂</span><span>${player.nickname}</span><span class="player-gender-tag ${player.gender}">${player.gender === 'male' ? '♂' : '♀'}</span>`;
+        } else {
+            chip.innerHTML = `<span>👤</span><span>${player.nickname}</span><span class="player-gender-tag ${player.gender}">${player.gender === 'male' ? '♂' : '♀'}</span>`;
         }
-    }
-    
-    shuffledPlayers.forEach(player => {
-        if (results[player.originalIndex] !== undefined) return;
-        
-        const availableRoles = roles
-            .map((role, index) => ({ role, index }))
-            .filter(item => !assignedRoles.has(item.index));
-        
-        if (availableRoles.length === 0) return;
-        
-        const scoredRoles = availableRoles.map(item => ({
-            ...item,
-            score: calculateMatchScore(player, item.role, room)
-        }));
-        
-        scoredRoles.sort((a, b) => b.score - a.score);
-        
-        const topCandidates = scoredRoles.slice(0, Math.min(3, scoredRoles.length));
-        const selected = topCandidates[Math.floor(Math.random() * topCandidates.length)];
-        
-        results[player.originalIndex] = selected.role;
-        assignedRoles.add(selected.index);
+        container.appendChild(chip);
     });
-    
-    return results;
-}
 
-function calculateMatchScore(player, role, room) {
-    let score = 0;
-    
-    if (player.preference === 'high-energy' && role.tag === '🔥高能') score += 10;
-    if (player.preference === 'funny' && role.tag === '😂搞笑') score += 10;
-    if (player.preference === 'detective' && role.tag === '🔍推理') score += 10;
-    if (player.preference === 'edge' && role.tag === '😌边缘') score += 10;
-    if (player.preference === 'emotional' && role.tag === '💧情感') score += 10;
-    
-    if (role.gender === 'any') {
-        score += 3;
-    } else if (role.gender === player.gender) {
-        score += 5;
-    } else if (!room.allowCrossPlay) {
-        score -= 20;
+    if (room.players.length >= 1) {
+        document.getElementById('birthdaySelectGroup').style.display = 'block';
+        updateBirthdayPlayerSelect(room);
     }
-    
-    score += Math.random() * 3;
-    
-    return score;
+    if (room.players.length >= 2) {
+        document.getElementById('avoidRulesGroup').style.display = 'block';
+        updateAvoidRulePlayerOptions(room);
+    }
 }
 
-function joinRoom() {
+function updateBirthdayPlayerSelect(room) {
+    const container = document.getElementById('birthdayPlayerSelect');
+    container.innerHTML = '';
+
+    const noneBtn = document.createElement('button');
+    noneBtn.className = 'birthday-player-btn' + (room.birthdayPlayerId === null ? ' selected' : '');
+    noneBtn.textContent = '暂不指定';
+    noneBtn.onclick = () => setBirthdayPlayer(null);
+    container.appendChild(noneBtn);
+
+    room.players.forEach(player => {
+        const btn = document.createElement('button');
+        const isSelected = room.birthdayPlayerId === player.id;
+        btn.className = 'birthday-player-btn' + (isSelected ? ' selected' : '');
+        btn.textContent = `${player.nickname}（${player.gender === 'male' ? '♂' : '♀'}）`;
+        btn.onclick = () => setBirthdayPlayer(player.id);
+        container.appendChild(btn);
+    });
+}
+
+async function setBirthdayPlayer(playerId) {
+    try {
+        const res = await fetch(`${API}/api/rooms/${currentRoomId}/birthday`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ playerId, creatorToken })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || '设置失败', 'error');
+            return;
+        }
+        showToast(playerId ? '🎂 已指定寿星！' : '已取消寿星指定', 'success');
+        updateCreatorPlayerList(data.room);
+    } catch (e) {
+        showToast('网络错误', 'error');
+    }
+}
+
+function updateAvoidRulePlayerOptions(room) {
+    const selects = document.querySelectorAll('#creatorAvoidRules .avoid-rule-player');
+    selects.forEach(select => {
+        const curVal = select.value;
+        select.innerHTML = '<option value="">选择玩家</option>';
+        room.players.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = `${p.nickname}（${p.gender === 'male' ? '♂' : '♀'}）`;
+            select.appendChild(opt);
+        });
+        if (curVal) select.value = curVal;
+    });
+}
+
+function addCreatorAvoidRule() {
+    const container = document.getElementById('creatorAvoidRules');
+    const room = null;
+
+    const tagOptions = roleTags.map(t => `<option value="${t}">${t}</option>`).join('');
+
+    const row = document.createElement('div');
+    row.className = 'avoid-rule-item';
+    row.innerHTML = `
+        <select class="avoid-rule-player">
+            <option value="">选择玩家</option>
+        </select>
+        <span style="color:var(--text-light);font-size:13px;">避开</span>
+        <select class="avoid-rule-tag">
+            ${tagOptions}
+        </select>
+        <button class="remove-btn" onclick="this.parentElement.remove()">×</button>
+    `;
+    container.appendChild(row);
+
+    fetch(`${API}/api/rooms/${currentRoomId}`).then(r => r.json()).then(room => {
+        updateAvoidRulePlayerOptions(room);
+    });
+}
+
+async function collectAndSaveAvoidRules() {
+    const rules = [];
+    const rows = document.querySelectorAll('#creatorAvoidRules .avoid-rule-item');
+    rows.forEach(row => {
+        const playerId = row.querySelector('.avoid-rule-player').value;
+        const avoidTag = row.querySelector('.avoid-rule-tag').value;
+        if (playerId && avoidTag) {
+            rules.push({ playerId, avoidTag });
+        }
+    });
+
+    try {
+        await fetch(`${API}/api/rooms/${currentRoomId}/avoid`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creatorToken, rules })
+        });
+    } catch (e) { }
+}
+
+function checkGenderValidation(room) {
+    if (room.allowCrossPlay || room.players.length === 0) {
+        document.getElementById('genderValidationMsg').style.display = 'none';
+        return;
+    }
+
+    const maleRoles = room.roles.filter(r => r.gender === 'male').length;
+    const femaleRoles = room.roles.filter(r => r.gender === 'female').length;
+    const anyRoles = room.roles.filter(r => r.gender === 'any').length;
+    const malePlayers = room.players.filter(p => p.gender === 'male').length;
+    const femalePlayers = room.players.filter(p => p.gender === 'female').length;
+
+    const maleShort = Math.max(0, malePlayers - maleRoles);
+    const femaleShort = Math.max(0, femalePlayers - femaleRoles);
+
+    if (maleShort + femaleShort > anyRoles) {
+        document.getElementById('genderValidationMsg').style.display = 'block';
+        document.getElementById('genderWarningText').innerHTML =
+            `⚠️ 当前角色性别配置无法分配：需要 ${maleRoles} 个男角色但有 ${malePlayers} 个男玩家，` +
+            `需要 ${femaleRoles} 个女角色但有 ${femalePlayers} 个女玩家。"不限"角色仅 ${anyRoles} 个，不足以补差。` +
+            `请开启反串或调整角色性别。`;
+        document.getElementById('startLotteryBtn').disabled = true;
+        document.getElementById('startLotteryBtn').style.opacity = '0.5';
+    } else {
+        document.getElementById('genderValidationMsg').style.display = 'none';
+        document.getElementById('startLotteryBtn').disabled = false;
+        document.getElementById('startLotteryBtn').style.opacity = '1';
+    }
+}
+
+async function startLottery() {
+    await collectAndSaveAvoidRules();
+
+    try {
+        const res = await fetch(`${API}/api/rooms/${currentRoomId}/lottery`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creatorToken })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            if (data.error && data.error.includes('性别')) {
+                document.getElementById('genderErrorText').textContent = data.error;
+                document.getElementById('genderErrorModal').style.display = 'flex';
+            } else {
+                showToast(data.error || '抽签失败', 'error');
+            }
+            return;
+        }
+
+        showToast('🎲 抽签开始！', 'success');
+        showCreatorResults(data.room);
+
+    } catch (e) {
+        showToast('网络错误', 'error');
+    }
+}
+
+function showCreatorResults(room) {
+    clearInterval(creatorPollingInterval);
+    document.getElementById('roomManageCard').style.display = 'none';
+    document.getElementById('lotteryDoneCard').style.display = 'block';
+
+    const container = document.getElementById('creatorResultList');
+    container.innerHTML = '';
+
+    room.players.forEach(player => {
+        const role = room.lotteryResults[player.id];
+        if (!role) return;
+        const isBirthday = room.birthdayPlayerId === player.id;
+
+        const item = document.createElement('div');
+        item.className = 'result-item' + (isBirthday ? ' is-birthday' : '');
+        item.innerHTML = `
+            <span class="result-item-player">
+                ${isBirthday ? '🎂 ' : ''}${player.nickname}
+                <span class="player-gender-tag ${player.gender}">${player.gender === 'male' ? '♂' : '♀'}</span>
+            </span>
+            <span class="result-item-role">${role.name} ${role.tag}</span>
+        `;
+        container.appendChild(item);
+    });
+}
+
+function closeGenderErrorModal() {
+    document.getElementById('genderErrorModal').style.display = 'none';
+}
+
+async function joinRoom() {
     const roomId = document.getElementById('joinRoomId').value.trim();
     if (!roomId || roomId.length !== 6) {
         showToast('请输入6位房间号~', 'error');
         return;
     }
-    
-    const room = getRoom(roomId);
-    if (!room) {
-        showToast('房间不存在哦~', 'error');
-        return;
+
+    try {
+        const res = await fetch(`${API}/api/rooms/${roomId}`);
+        const room = await res.json();
+        if (!res.ok) {
+            showToast(room.error || '房间不存在', 'error');
+            return;
+        }
+        if (room.status !== 'waiting') {
+            showToast('房间已开始抽签啦~', 'error');
+            return;
+        }
+
+        currentRoomId = roomId;
+        document.getElementById('joinRoomCard').style.display = 'none';
+        document.getElementById('playerInfoCard').style.display = 'block';
+        document.getElementById('joinScriptName').textContent = room.scriptName;
+
+        showToast('✅ 找到房间啦！', 'success');
+    } catch (e) {
+        showToast('网络错误，请检查连接~', 'error');
     }
-    
-    if (room.status !== 'waiting') {
-        showToast('房间已开始抽签啦~', 'error');
-        return;
-    }
-    
-    currentRoom = room;
-    
-    document.getElementById('joinRoomCard').style.display = 'none';
-    document.getElementById('playerInfoCard').style.display = 'block';
-    
-    showToast('✅ 找到房间啦！', 'success');
 }
 
-function submitPlayerInfo() {
+async function submitPlayerInfo() {
     const nickname = document.getElementById('playerNickname').value.trim();
     if (!nickname) {
         showToast('请输入你的昵称~', 'error');
         return;
     }
-    
+
     const preference = document.querySelector('input[name="preference"]:checked').value;
     const gender = document.querySelector('input[name="gender"]:checked').value;
-    
-    if (currentRoom.players.length >= currentRoom.playerCount) {
-        showToast('房间人数已满啦~', 'error');
-        return;
+
+    try {
+        const res = await fetch(`${API}/api/rooms/${currentRoomId}/join`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nickname, preference, gender })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || '加入失败', 'error');
+            return;
+        }
+
+        currentPlayerId = data.playerId;
+        currentRoomId = currentRoomId;
+
+        document.getElementById('playerInfoCard').style.display = 'none';
+        document.getElementById('waitingCard').style.display = 'block';
+        document.getElementById('waitingRoomName').textContent = data.room.scriptName;
+        document.getElementById('waitingTotal').textContent = data.room.playerCount;
+
+        updateWaitingPlayerList(data.room);
+        startPlayerPolling();
+
+        showToast('🎉 加入成功！等待抽签~', 'success');
+    } catch (e) {
+        showToast('网络错误', 'error');
     }
-    
-    currentPlayer = {
-        id: currentRoom.players.length,
-        nickname,
-        preference,
-        gender
-    };
-    
-    currentRoom.players.push(currentPlayer);
-    saveRoom(currentRoom);
-    
-    document.getElementById('playerInfoCard').style.display = 'none';
-    document.getElementById('waitingCard').style.display = 'block';
-    
-    document.getElementById('waitingRoomName').textContent = currentRoom.scriptName;
-    document.getElementById('waitingTotal').textContent = currentRoom.playerCount;
-    
-    startPolling();
-    updateWaitingList();
-    
-    showToast('🎉 加入成功！等待抽签~', 'success');
 }
 
-function updateWaitingList() {
-    if (!currentRoom) return;
-    
-    document.getElementById('waitingPlayerCount').textContent = currentRoom.players.length;
-    
+function startPlayerPolling() {
+    if (playerPollingInterval) clearInterval(playerPollingInterval);
+    playerPollingInterval = setInterval(async () => {
+        if (!currentRoomId || !currentPlayerId) return;
+        try {
+            const res = await fetch(`${API}/api/rooms/${currentRoomId}`);
+            const room = await res.json();
+            updateWaitingPlayerList(room);
+            if (room.status === 'lottery-done') {
+                clearInterval(playerPollingInterval);
+                fetchAndShowResult();
+            }
+        } catch (e) { }
+    }, 2000);
+}
+
+function updateWaitingPlayerList(room) {
+    document.getElementById('waitingPlayerCount').textContent = room.players.length;
     const container = document.getElementById('waitingPlayersList');
     container.innerHTML = '';
-    
-    currentRoom.players.forEach((player, index) => {
+
+    room.players.forEach(player => {
         const chip = document.createElement('div');
         chip.className = 'player-chip';
-        
-        const isBirthday = currentRoom.birthdayPlayerIndex !== -1 && index === currentRoom.birthdayPlayerIndex;
-        const isCurrentPlayer = currentPlayer && currentPlayer.id === index;
-        
+        const isMe = player.id === currentPlayerId;
+        const isBirthday = room.birthdayPlayerId === player.id;
+
         if (isBirthday) {
             chip.classList.add('birthday');
             chip.innerHTML = `<span>🎂</span><span>${player.nickname}</span>`;
-        } else if (isCurrentPlayer) {
+        } else if (isMe) {
             chip.classList.add('ready');
             chip.innerHTML = `<span>✨</span><span>${player.nickname}（你）</span>`;
         } else {
             chip.innerHTML = `<span>👤</span><span>${player.nickname}</span>`;
         }
-        
         container.appendChild(chip);
     });
 }
 
-function showLotteryResult() {
-    if (!currentPlayer || !currentRoom || !currentRoom.lotteryResults) return;
-    
-    const result = currentRoom.lotteryResults[currentPlayer.id];
-    if (!result) return;
-    
-    clearInterval(pollingInterval);
-    
-    const isBirthdayPlayer = currentRoom.birthdayPlayerIndex !== -1 && 
-                            currentPlayer.id === currentRoom.birthdayPlayerIndex;
-    
-    if (isBirthdayPlayer) {
+async function fetchAndShowResult() {
+    try {
+        const res = await fetch(`${API}/api/rooms/${currentRoomId}/result/${currentPlayerId}`);
+        const data = await res.json();
+        if (!res.ok) {
+            showToast(data.error || '获取结果失败', 'error');
+            return;
+        }
+        showLotteryResult(data);
+    } catch (e) {
+        showToast('网络错误', 'error');
+    }
+}
+
+function showLotteryResult(data) {
+    const { role, isBirthday, birthdayMessage, openingSlogan } = data;
+
+    document.getElementById('waitingCard').style.display = 'none';
+    document.getElementById('lotteryResultCard').style.display = 'block';
+
+    if (isBirthday) {
         document.getElementById('birthdayAnimation').style.display = 'block';
+        document.getElementById('birthdayExtra').style.display = 'block';
+        document.getElementById('birthdayMessageDisplay').textContent = birthdayMessage || '生日快乐！愿你天天开心~';
+
+        if (openingSlogan) {
+            document.getElementById('openingSloganDisplay').style.display = 'block';
+            document.getElementById('sloganText').textContent = openingSlogan;
+            document.getElementById('sloganBtn').style.display = 'block';
+        }
+
+        document.getElementById('resultTitle').textContent = '🎂 寿星专属角色是...';
+
         triggerConfetti();
-        triggerDanmaku();
-        
-        setTimeout(() => {
-            document.getElementById('birthdayExtra').style.display = 'block';
-            document.getElementById('birthdayMessageDisplay').textContent = 
-                currentRoom.birthdayMessage || '生日快乐！愿你天天开心~';
-            
-            if (currentRoom.openingSlogan) {
-                document.getElementById('openingSloganDisplay').style.display = 'block';
-                document.getElementById('sloganText').textContent = currentRoom.openingSlogan;
-                document.getElementById('sloganBtn').style.display = 'block';
-            }
-        }, 1500);
+        triggerDanmaku(birthdayMessage);
     } else {
         document.getElementById('birthdayAnimation').style.display = 'none';
         document.getElementById('birthdayExtra').style.display = 'none';
         document.getElementById('sloganBtn').style.display = 'none';
+        document.getElementById('resultTitle').textContent = '🎭 你的角色是...';
     }
-    
-    document.getElementById('waitingCard').style.display = 'none';
-    document.getElementById('lotteryResultCard').style.display = 'block';
-    
-    document.getElementById('resultTitle').textContent = isBirthdayPlayer ? 
-        '🎂 寿星专属角色是...' : '🎭 你的角色是...';
-    
-    document.getElementById('roleAvatar').textContent = result.avatar;
-    document.getElementById('roleName').textContent = result.name;
-    
+
+    document.getElementById('roleAvatar').textContent = role.avatar;
+    document.getElementById('roleName').textContent = role.name;
+
     const tagsContainer = document.getElementById('roleTags');
     tagsContainer.innerHTML = '';
     const tagSpan = document.createElement('span');
     tagSpan.className = 'role-tag';
-    tagSpan.textContent = result.tag;
+    tagSpan.textContent = role.tag;
     tagsContainer.appendChild(tagSpan);
-    
-    if (result.gender !== 'any') {
-        const genderSpan = document.createElement('span');
-        genderSpan.className = 'role-tag';
-        genderSpan.textContent = result.gender === 'male' ? '♂男' : '♀女';
-        tagsContainer.appendChild(genderSpan);
+
+    if (role.gender !== 'any') {
+        const gSpan = document.createElement('span');
+        gSpan.className = 'role-tag';
+        gSpan.textContent = role.gender === 'male' ? '♂男' : '♀女';
+        tagsContainer.appendChild(gSpan);
     }
-    
-    document.getElementById('roleCostume').textContent = result.costume;
-    document.getElementById('roleLine').textContent = result.line;
+
+    document.getElementById('roleCostume').textContent = role.costume;
+    document.getElementById('roleLine').textContent = role.line;
 }
 
 function showSloganModal() {
-    if (!currentRoom || !currentRoom.openingSlogan) return;
-    
-    document.getElementById('bigSloganText').textContent = currentRoom.openingSlogan;
+    const sloganText = document.getElementById('sloganText').textContent;
+    if (!sloganText) return;
+    document.getElementById('bigSloganText').textContent = sloganText;
     document.getElementById('sloganModal').style.display = 'flex';
     triggerConfetti();
 }
@@ -661,7 +614,7 @@ function closeSloganModal() {
 function triggerConfetti() {
     const container = document.getElementById('confettiContainer');
     const colors = ['#ff6b9d', '#a29bfe', '#fdcb6e', '#00b894', '#74b9ff', '#ff7675'];
-    
+
     for (let i = 0; i < 60; i++) {
         setTimeout(() => {
             const confetti = document.createElement('div');
@@ -670,7 +623,7 @@ function triggerConfetti() {
             confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
             confetti.style.animationDelay = Math.random() * 0.5 + 's';
             confetti.style.animationDuration = (2 + Math.random() * 2) + 's';
-            
+
             const shapes = ['circle', 'square', 'triangle'];
             const shape = shapes[Math.floor(Math.random() * shapes.length)];
             if (shape === 'circle') {
@@ -683,22 +636,20 @@ function triggerConfetti() {
                 confetti.style.borderBottom = '12px solid ' + colors[Math.floor(Math.random() * colors.length)];
                 confetti.style.backgroundColor = 'transparent';
             }
-            
+
             container.appendChild(confetti);
-            
             setTimeout(() => confetti.remove(), 4000);
         }, i * 30);
     }
 }
 
-function triggerDanmaku() {
+function triggerDanmaku(customMessage) {
     const container = document.getElementById('danmakuContainer');
-    
     const messages = [...birthdayDanmakuMessages];
-    if (currentRoom && currentRoom.birthdayMessage) {
-        messages.unshift('💌 ' + currentRoom.birthdayMessage);
+    if (customMessage) {
+        messages.unshift('💌 ' + customMessage);
     }
-    
+
     messages.forEach((msg, index) => {
         setTimeout(() => {
             const danmaku = document.createElement('div');
@@ -707,9 +658,7 @@ function triggerDanmaku() {
             danmaku.style.top = (10 + Math.random() * 60) + '%';
             danmaku.style.animationDuration = (5 + Math.random() * 3) + 's';
             danmaku.style.fontSize = (14 + Math.random() * 6) + 'px';
-            
             container.appendChild(danmaku);
-            
             setTimeout(() => danmaku.remove(), 9000);
         }, index * 500);
     });
@@ -719,20 +668,22 @@ function showToast(message, type = 'info') {
     const toast = document.getElementById('toast');
     toast.textContent = message;
     toast.className = 'toast show ' + type;
-    
-    setTimeout(() => {
-        toast.classList.remove('show');
-    }, 2500);
+    setTimeout(() => toast.classList.remove('show'), 2500);
 }
 
 function copyRoomLink() {
-    if (!currentRoom) return;
-    
-    const url = `${window.location.origin}${window.location.pathname}?room=${currentRoom.id}`;
+    if (!currentRoomId) return;
+    const url = `${window.location.origin}${window.location.pathname}?room=${currentRoomId}`;
     navigator.clipboard.writeText(url).then(() => {
-        showToast('📋 链接已复制！', 'success');
+        showToast('📋 链接已复制！发给朋友吧~', 'success');
     }).catch(() => {
-        showToast('复制失败，请手动复制~', 'error');
+        const textarea = document.createElement('textarea');
+        textarea.value = url;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('📋 链接已复制！', 'success');
     });
 }
 
@@ -747,7 +698,7 @@ function saveSurpriseRecord(record) {
 function loadSurpriseList() {
     const records = JSON.parse(localStorage.getItem('birthdaySurpriseRecords') || '[]');
     const container = document.getElementById('surpriseList');
-    
+
     if (records.length === 0) {
         container.innerHTML = `
             <div class="empty-state">
@@ -758,18 +709,16 @@ function loadSurpriseList() {
         `;
         return;
     }
-    
+
     container.innerHTML = '';
     records.forEach((record, index) => {
         const item = document.createElement('div');
         item.className = 'surprise-item';
         item.onclick = () => showSurpriseDetail(index);
-        
         item.innerHTML = `
             <div class="surprise-item-title">🎬 ${record.scriptName}</div>
             <div class="surprise-item-meta">🎂 ${record.birthdayPlayer} · ${record.time}</div>
         `;
-        
         container.appendChild(item);
     });
 }
@@ -778,19 +727,19 @@ function showSurpriseDetail(index) {
     const records = JSON.parse(localStorage.getItem('birthdaySurpriseRecords') || '[]');
     const record = records[index];
     if (!record) return;
-    
+
     document.getElementById('surpriseScript').textContent = record.scriptName;
     document.getElementById('surprisePlayer').textContent = record.birthdayPlayer;
     document.getElementById('surpriseMessage').textContent = record.message || '（无）';
     document.getElementById('surpriseTime').textContent = record.time;
-    
+
     if (record.task) {
         document.getElementById('surpriseTaskSection').style.display = 'block';
         document.getElementById('surpriseTaskContent').textContent = record.task;
     } else {
         document.getElementById('surpriseTaskSection').style.display = 'none';
     }
-    
+
     document.getElementById('surpriseDetailCard').style.display = 'block';
     document.getElementById('surpriseDetailCard').scrollIntoView({ behavior: 'smooth' });
 }
@@ -798,18 +747,13 @@ function showSurpriseDetail(index) {
 function checkUrlParams() {
     const params = new URLSearchParams(window.location.search);
     const roomId = params.get('room');
-    
+
     if (roomId) {
-        const room = getRoom(roomId);
-        if (room && room.status === 'waiting') {
-            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
-            
-            document.querySelector('.nav-btn[data-module="join"]').classList.add('active');
-            document.getElementById('module-join').classList.add('active');
-            
-            document.getElementById('joinRoomId').value = roomId;
-            setTimeout(joinRoom, 500);
-        }
+        document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));
+        document.querySelector('.nav-btn[data-module="join"]').classList.add('active');
+        document.getElementById('module-join').classList.add('active');
+        document.getElementById('joinRoomId').value = roomId;
+        setTimeout(joinRoom, 500);
     }
 }
