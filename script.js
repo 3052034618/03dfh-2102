@@ -5,6 +5,8 @@ let creatorToken = null;
 let currentPlayerId = null;
 let creatorPollingInterval = null;
 let playerPollingInterval = null;
+let lastResultRoleId = null;
+let resultShownOnce = false;
 
 const roleTags = ['🔥高能', '😂搞笑', '🔍推理', '😌边缘', '💧情感', '💕情侣', '🎭任意'];
 const genderOptions = [
@@ -42,7 +44,6 @@ document.addEventListener('DOMContentLoaded', function() {
 function initModuleSwitch() {
     const navBtns = document.querySelectorAll('.nav-btn');
     const modules = document.querySelectorAll('.module');
-
     navBtns.forEach(btn => {
         btn.addEventListener('click', () => {
             const targetModule = btn.dataset.module;
@@ -71,10 +72,8 @@ function addRoleRow(defaultName = '') {
     const container = document.getElementById('rolesContainer');
     const row = document.createElement('div');
     row.className = 'role-row';
-
     const tagOpts = roleTags.map(t => `<option value="${t}">${t}</option>`).join('');
     const genderOpts = genderOptions.map(o => `<option value="${o.value}">${o.label}</option>`).join('');
-
     row.innerHTML = `
         <input type="text" placeholder="角色名" value="${defaultName}" maxlength="15">
         <select class="gender-select">${genderOpts}</select>
@@ -95,10 +94,7 @@ function removeRoleRow(btn) {
 
 async function createRoom() {
     const scriptName = document.getElementById('scriptName').value.trim();
-    if (!scriptName) {
-        showToast('请输入剧本名称~', 'error');
-        return;
-    }
+    if (!scriptName) { showToast('请输入剧本名称~', 'error'); return; }
 
     const playerCount = parseInt(document.getElementById('playerCount').value);
     const allowCrossPlay = document.getElementById('allowCrossPlay').checked;
@@ -128,24 +124,16 @@ async function createRoom() {
         const res = await fetch(`${API}/api/rooms`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                scriptName, playerCount, allowCrossPlay, roles,
-                birthdayMessage, openingSlogan, surpriseTask
-            })
+            body: JSON.stringify({ scriptName, playerCount, allowCrossPlay, roles, birthdayMessage, openingSlogan, surpriseTask })
         });
-
         const data = await res.json();
-        if (!res.ok) {
-            showToast(data.error || '创建失败', 'error');
-            return;
-        }
+        if (!res.ok) { showToast(data.error || '创建失败', 'error'); return; }
 
         currentRoomId = data.roomId;
         creatorToken = data.creatorToken;
 
         document.getElementById('createFormCard').style.display = 'none';
         document.getElementById('roomManageCard').style.display = 'block';
-
         document.getElementById('roomId').textContent = data.roomId;
         document.getElementById('roomScriptName').textContent = scriptName;
         document.getElementById('roomPlayerCount').textContent = playerCount;
@@ -156,22 +144,13 @@ async function createRoom() {
         startCreatorPolling();
 
         if (birthdayMessage || openingSlogan || surpriseTask) {
-            saveSurpriseRecord({
-                scriptName,
-                birthdayPlayer: '待指定',
-                message: birthdayMessage,
-                slogan: openingSlogan,
-                task: surpriseTask,
-                time: new Date().toLocaleString('zh-CN')
-            });
+            saveSurpriseRecord({ scriptName, birthdayPlayer: '待指定', message: birthdayMessage, slogan: openingSlogan, task: surpriseTask, time: new Date().toLocaleString('zh-CN') });
         }
 
         showToast('🎉 房间创建成功！', 'success');
         triggerConfetti();
-
     } catch (e) {
         showToast('网络错误，请检查服务器~', 'error');
-        console.error(e);
     }
 }
 
@@ -179,13 +158,8 @@ function generateQRCode(roomId) {
     const url = `${window.location.origin}${window.location.pathname}?room=${roomId}`;
     const qrcodeContainer = document.getElementById('qrcode');
     qrcodeContainer.innerHTML = '';
-
     if (window.QRCode) {
-        new QRCode(qrcodeContainer, {
-            text: url, width: 150, height: 150,
-            colorDark: '#2d3436', colorLight: '#ffffff',
-            correctLevel: QRCode.CorrectLevel.H
-        });
+        new QRCode(qrcodeContainer, { text: url, width: 150, height: 150, colorDark: '#2d3436', colorLight: '#ffffff', correctLevel: QRCode.CorrectLevel.H });
     } else {
         qrcodeContainer.innerHTML = `<div style="padding:20px;color:var(--text-light);font-size:12px;word-break:break-all;">${url}</div>`;
     }
@@ -211,8 +185,23 @@ function startCreatorPolling() {
 }
 
 function updateAllAvoidRoleOptions(room) {
-    const roleSelects = document.querySelectorAll('#creatorAvoidRules .avoid-rule-role');
-    roleSelects.forEach(sel => updateAvoidRoleOptions(room, sel));
+    document.querySelectorAll('#creatorAvoidRules .avoid-rule-role').forEach(sel => {
+        fillRoleOptions(room, sel);
+    });
+}
+
+function fillRoleOptions(room, selectEl) {
+    const curVal = selectEl.value;
+    selectEl.innerHTML = '<option value="">选择角色</option>';
+    if (room && room.roles) {
+        room.roles.forEach(r => {
+            const opt = document.createElement('option');
+            opt.value = r.id;
+            opt.textContent = r.name + '（' + r.tag + '）';
+            selectEl.appendChild(opt);
+        });
+    }
+    if (curVal !== undefined && curVal !== '') selectEl.value = curVal;
 }
 
 function updateCreatorPlayerList(room) {
@@ -253,7 +242,6 @@ function updateCreatorPlayerList(room) {
 function updateBirthdayPlayerSelect(room) {
     const container = document.getElementById('birthdayPlayerSelect');
     container.innerHTML = '';
-
     const noneBtn = document.createElement('button');
     noneBtn.className = 'birthday-player-btn' + (room.birthdayPlayerId === null ? ' selected' : '');
     noneBtn.textContent = '暂不指定';
@@ -273,25 +261,18 @@ function updateBirthdayPlayerSelect(room) {
 async function setBirthdayPlayer(playerId) {
     try {
         const res = await fetch(`${API}/api/rooms/${currentRoomId}/birthday`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ playerId, creatorToken })
         });
         const data = await res.json();
-        if (!res.ok) {
-            showToast(data.error || '设置失败', 'error');
-            return;
-        }
+        if (!res.ok) { showToast(data.error || '设置失败', 'error'); return; }
         showToast(playerId ? '🎂 已指定寿星！' : '已取消寿星指定', 'success');
         updateCreatorPlayerList(data.room);
-    } catch (e) {
-        showToast('网络错误', 'error');
-    }
+    } catch (e) { showToast('网络错误', 'error'); }
 }
 
 function updateAvoidRulePlayerOptions(room) {
-    const selects = document.querySelectorAll('#creatorAvoidRules .avoid-rule-player');
-    selects.forEach(select => {
+    document.querySelectorAll('#creatorAvoidRules .avoid-rule-player').forEach(select => {
         const curVal = select.value;
         select.innerHTML = '<option value="">选择玩家</option>';
         room.players.forEach(p => {
@@ -304,21 +285,8 @@ function updateAvoidRulePlayerOptions(room) {
     });
 }
 
-function updateAvoidRoleOptions(room, selectEl) {
-    const curVal = selectEl.value;
-    selectEl.innerHTML = '<option value="">选择角色</option>';
-    room.roles.forEach(r => {
-        const opt = document.createElement('option');
-        opt.value = r.id;
-        opt.textContent = r.name;
-        select.appendChild(opt);
-    });
-    if (curVal !== undefined && curVal !== '') selectEl.value = curVal;
-}
-
 function addCreatorAvoidRule() {
     const container = document.getElementById('creatorAvoidRules');
-
     const tagOptions = roleTags.map(t => `<option value="${t}">${t}</option>`).join('');
 
     const row = document.createElement('div');
@@ -358,18 +326,16 @@ function addCreatorAvoidRule() {
 
     fetch(`${API}/api/rooms/${currentRoomId}`).then(r => r.json()).then(room => {
         updateAvoidRulePlayerOptions(room);
-        updateAvoidRoleOptions(room, roleSelect);
+        fillRoleOptions(room, roleSelect);
     });
 }
 
 async function collectAndSaveAvoidRules() {
     const rules = [];
-    const rows = document.querySelectorAll('#creatorAvoidRules .avoid-rule-item');
-    rows.forEach(row => {
+    document.querySelectorAll('#creatorAvoidRules .avoid-rule-item').forEach(row => {
         const playerId = row.querySelector('.avoid-rule-player').value;
         const type = row.querySelector('.avoid-rule-type').value;
         if (!playerId) return;
-
         if (type === 'tag') {
             const avoidTag = row.querySelector('.avoid-rule-tag').value;
             if (avoidTag) rules.push({ type, playerId, avoidTag });
@@ -378,11 +344,9 @@ async function collectAndSaveAvoidRules() {
             if (!isNaN(avoidRoleId)) rules.push({ type, playerId, avoidRoleId });
         }
     });
-
     try {
         await fetch(`${API}/api/rooms/${currentRoomId}/avoid`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ creatorToken, rules })
         });
     } catch (e) { }
@@ -393,62 +357,35 @@ function checkRoomValidation(room) {
     const warningBox = document.getElementById('genderValidationMsg');
     const warningText = document.getElementById('genderWarningText');
 
-    if (room.players.length === 0) {
-        warningBox.style.display = 'none';
-        btn.disabled = true;
-        btn.style.opacity = '0.5';
-        return;
-    }
-
+    if (room.players.length === 0) { warningBox.style.display = 'none'; btn.disabled = true; btn.style.opacity = '0.5'; return; }
     if (room.roles.length !== room.playerCount) {
         warningBox.style.display = 'block';
         warningText.innerHTML = `⚠️ 角色数量不匹配：设置了 ${room.playerCount} 位玩家，但有 ${room.roles.length} 个角色。${room.roles.length < room.playerCount ? '角色不够，请添加角色' : '角色太多，请删除角色'}。`;
-        btn.disabled = true;
-        btn.style.opacity = '0.5';
-        return;
+        btn.disabled = true; btn.style.opacity = '0.5'; return;
     }
-
-    if (room.players.length < room.playerCount) {
-        warningBox.style.display = 'none';
-        btn.disabled = true;
-        btn.style.opacity = '0.5';
-        return;
-    }
-
+    if (room.players.length < room.playerCount) { warningBox.style.display = 'none'; btn.disabled = true; btn.style.opacity = '0.5'; return; }
     if (!room.allowCrossPlay) {
         const maleRoles = room.roles.filter(r => r.gender === 'male').length;
         const femaleRoles = room.roles.filter(r => r.gender === 'female').length;
         const anyRoles = room.roles.filter(r => r.gender === 'any').length;
         const malePlayers = room.players.filter(p => p.gender === 'male').length;
         const femalePlayers = room.players.filter(p => p.gender === 'female').length;
-
         const maleShort = Math.max(0, malePlayers - maleRoles);
         const femaleShort = Math.max(0, femalePlayers - femaleRoles);
-
         if (maleShort + femaleShort > anyRoles) {
             warningBox.style.display = 'block';
-            warningText.innerHTML =
-                `⚠️ 性别匹配失败：有 ${malePlayers} 个男玩家但只有 ${maleRoles} 个男角色，` +
-                `有 ${femalePlayers} 个女玩家但只有 ${femaleRoles} 个女角色。"不限"角色仅 ${anyRoles} 个，不足以补差。` +
-                `请开启反串或调整角色性别。`;
-            btn.disabled = true;
-            btn.style.opacity = '0.5';
-            return;
+            warningText.innerHTML = `⚠️ 性别匹配失败：有 ${malePlayers} 个男玩家但只有 ${maleRoles} 个男角色，有 ${femalePlayers} 个女玩家但只有 ${femaleRoles} 个女角色。"不限"角色仅 ${anyRoles} 个，不足以补差。请开启反串或调整角色性别。`;
+            btn.disabled = true; btn.style.opacity = '0.5'; return;
         }
     }
-
-    warningBox.style.display = 'none';
-    btn.disabled = false;
-    btn.style.opacity = '1';
+    warningBox.style.display = 'none'; btn.disabled = false; btn.style.opacity = '1';
 }
 
 async function startLottery() {
     await collectAndSaveAvoidRules();
-
     try {
         const res = await fetch(`${API}/api/rooms/${currentRoomId}/lottery`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ creatorToken })
         });
         const data = await res.json();
@@ -457,13 +394,9 @@ async function startLottery() {
             document.getElementById('genderErrorModal').style.display = 'flex';
             return;
         }
-
         showToast('🎲 抽签开始！', 'success');
         showCreatorResults(data.room);
-
-    } catch (e) {
-        showToast('网络错误', 'error');
-    }
+    } catch (e) { showToast('网络错误', 'error'); }
 }
 
 function showCreatorResults(room) {
@@ -471,25 +404,112 @@ function showCreatorResults(room) {
     document.getElementById('roomManageCard').style.display = 'none';
     document.getElementById('lotteryDoneCard').style.display = 'block';
 
+    renderResultList(room);
+}
+
+function renderResultList(room) {
     const container = document.getElementById('creatorResultList');
     container.innerHTML = '';
+
+    const locked = new Set(room.lockedPlayers || []);
 
     room.players.forEach(player => {
         const role = room.lotteryResults[player.id];
         if (!role) return;
         const isBirthday = room.birthdayPlayerId === player.id;
+        const isLocked = locked.has(player.id);
 
         const item = document.createElement('div');
         item.className = 'result-item' + (isBirthday ? ' is-birthday' : '');
         item.innerHTML = `
-            <span class="result-item-player">
-                ${isBirthday ? '🎂 ' : ''}${player.nickname}
-                <span class="player-gender-tag ${player.gender}">${player.gender === 'male' ? '♂' : '♀'}</span>
-            </span>
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                <input type="checkbox" class="lock-checkbox" data-player-id="${player.id}" ${isLocked ? 'checked' : ''}>
+                <span class="result-item-player">
+                    ${isBirthday ? '🎂 ' : ''}${player.nickname}
+                    <span class="player-gender-tag ${player.gender}">${player.gender === 'male' ? '♂' : '♀'}</span>
+                    ${isLocked ? '<span style="color:var(--success);font-size:12px;">🔒锁定</span>' : ''}
+                </span>
+            </label>
             <span class="result-item-role">${role.name} ${role.tag}</span>
         `;
         container.appendChild(item);
     });
+
+    const redoInfo = document.getElementById('redoInfo');
+    const redoBtn = document.getElementById('redoLotteryBtn');
+    const lockBtn = document.getElementById('lockAndRedoBtn');
+
+    if (room.redoCount) {
+        redoInfo.style.display = 'block';
+        redoInfo.textContent = `已重抽 ${room.redoCount} 次`;
+    }
+
+    redoBtn.style.display = 'inline-flex';
+    lockBtn.style.display = 'inline-flex';
+
+    document.querySelectorAll('.lock-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateRedoPreview);
+    });
+}
+
+function updateRedoPreview() {
+    const checked = document.querySelectorAll('.lock-checkbox:checked');
+    const redoInfo = document.getElementById('redoInfo');
+    redoInfo.style.display = 'block';
+    if (checked.length > 0) {
+        redoInfo.textContent = `将锁定 ${checked.length} 人，重抽其余玩家`;
+    } else {
+        redoInfo.textContent = '全部玩家将重新抽签';
+    }
+}
+
+async function lockAndRedoLottery() {
+    const lockedPlayerIds = [];
+    document.querySelectorAll('.lock-checkbox:checked').forEach(cb => {
+        lockedPlayerIds.push(cb.dataset.playerId);
+    });
+
+    try {
+        await fetch(`${API}/api/rooms/${currentRoomId}/lock`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creatorToken, lockedPlayerIds })
+        });
+
+        const res = await fetch(`${API}/api/rooms/${currentRoomId}/redo-lottery`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creatorToken })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            document.getElementById('genderErrorText').textContent = data.error || '重抽失败';
+            document.getElementById('genderErrorModal').style.display = 'flex';
+            return;
+        }
+        showToast('🎲 重抽成功！', 'success');
+        renderResultList(data.room);
+    } catch (e) { showToast('网络错误', 'error'); }
+}
+
+async function redoLottery() {
+    try {
+        await fetch(`${API}/api/rooms/${currentRoomId}/lock`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creatorToken, lockedPlayerIds: [] })
+        });
+
+        const res = await fetch(`${API}/api/rooms/${currentRoomId}/redo-lottery`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creatorToken })
+        });
+        const data = await res.json();
+        if (!res.ok) {
+            document.getElementById('genderErrorText').textContent = data.error || '重抽失败';
+            document.getElementById('genderErrorModal').style.display = 'flex';
+            return;
+        }
+        showToast('🎲 全部重抽成功！', 'success');
+        renderResultList(data.room);
+    } catch (e) { showToast('网络错误', 'error'); }
 }
 
 function closeGenderErrorModal() {
@@ -498,20 +518,28 @@ function closeGenderErrorModal() {
 
 async function joinRoom() {
     const roomId = document.getElementById('joinRoomId').value.trim();
-    if (!roomId || roomId.length !== 6) {
-        showToast('请输入6位房间号~', 'error');
-        return;
-    }
+    if (!roomId || roomId.length !== 6) { showToast('请输入6位房间号~', 'error'); return; }
 
     try {
         const res = await fetch(`${API}/api/rooms/${roomId}`);
         const room = await res.json();
-        if (!res.ok) {
-            showToast(room.error || '房间不存在', 'error');
-            return;
-        }
-        if (room.status !== 'waiting') {
-            showToast('房间已开始抽签啦~', 'error');
+        if (!res.ok) { showToast(room.error || '房间不存在', 'error'); return; }
+        if (room.status === 'lottery-done') {
+            currentRoomId = roomId;
+            document.getElementById('joinRoomCard').style.display = 'none';
+            document.getElementById('waitingCard').style.display = 'block';
+            document.getElementById('waitingRoomName').textContent = room.scriptName;
+            document.getElementById('waitingTotal').textContent = room.playerCount;
+            document.getElementById('waitingPlayerCount').textContent = room.players.length;
+            showToast('此房间已开奖，等待查看结果...', 'info');
+            currentPlayerId = localStorage.getItem(`player_${roomId}`);
+            if (currentPlayerId) {
+                startPlayerPolling();
+            } else {
+                document.getElementById('waitingCard').style.display = 'none';
+                document.getElementById('playerInfoCard').style.display = 'block';
+                document.getElementById('joinScriptName').textContent = room.scriptName;
+            }
             return;
         }
 
@@ -519,37 +547,27 @@ async function joinRoom() {
         document.getElementById('joinRoomCard').style.display = 'none';
         document.getElementById('playerInfoCard').style.display = 'block';
         document.getElementById('joinScriptName').textContent = room.scriptName;
-
         showToast('✅ 找到房间啦！', 'success');
-    } catch (e) {
-        showToast('网络错误，请检查连接~', 'error');
-    }
+    } catch (e) { showToast('网络错误，请检查连接~', 'error'); }
 }
 
 async function submitPlayerInfo() {
     const nickname = document.getElementById('playerNickname').value.trim();
-    if (!nickname) {
-        showToast('请输入你的昵称~', 'error');
-        return;
-    }
+    if (!nickname) { showToast('请输入你的昵称~', 'error'); return; }
 
     const preference = document.querySelector('input[name="preference"]:checked').value;
     const gender = document.querySelector('input[name="gender"]:checked').value;
 
     try {
         const res = await fetch(`${API}/api/rooms/${currentRoomId}/join`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ nickname, preference, gender })
         });
         const data = await res.json();
-        if (!res.ok) {
-            showToast(data.error || '加入失败', 'error');
-            return;
-        }
+        if (!res.ok) { showToast(data.error || '加入失败', 'error'); return; }
 
         currentPlayerId = data.playerId;
-        currentRoomId = currentRoomId;
+        localStorage.setItem(`player_${currentRoomId}`, currentPlayerId);
 
         document.getElementById('playerInfoCard').style.display = 'none';
         document.getElementById('waitingCard').style.display = 'block';
@@ -558,11 +576,8 @@ async function submitPlayerInfo() {
 
         updateWaitingPlayerList(data.room);
         startPlayerPolling();
-
         showToast('🎉 加入成功！等待抽签~', 'success');
-    } catch (e) {
-        showToast('网络错误', 'error');
-    }
+    } catch (e) { showToast('网络错误', 'error'); }
 }
 
 function startPlayerPolling() {
@@ -572,9 +587,13 @@ function startPlayerPolling() {
         try {
             const res = await fetch(`${API}/api/rooms/${currentRoomId}`);
             const room = await res.json();
-            updateWaitingPlayerList(room);
-            if (room.status === 'lottery-done') {
-                clearInterval(playerPollingInterval);
+            if (room.status !== 'lottery-done') {
+                updateWaitingPlayerList(room);
+                return;
+            }
+            const currentRole = room.lotteryResults[currentPlayerId];
+            if (currentRole && currentRole.id !== lastResultRoleId) {
+                lastResultRoleId = currentRole.id;
                 fetchAndShowResult();
             }
         } catch (e) { }
@@ -585,13 +604,11 @@ function updateWaitingPlayerList(room) {
     document.getElementById('waitingPlayerCount').textContent = room.players.length;
     const container = document.getElementById('waitingPlayersList');
     container.innerHTML = '';
-
     room.players.forEach(player => {
         const chip = document.createElement('div');
         chip.className = 'player-chip';
         const isMe = player.id === currentPlayerId;
         const isBirthday = room.birthdayPlayerId === player.id;
-
         if (isBirthday) {
             chip.classList.add('birthday');
             chip.innerHTML = `<span>🎂</span><span>${player.nickname}</span>`;
@@ -609,18 +626,15 @@ async function fetchAndShowResult() {
     try {
         const res = await fetch(`${API}/api/rooms/${currentRoomId}/result/${currentPlayerId}`);
         const data = await res.json();
-        if (!res.ok) {
-            showToast(data.error || '获取结果失败', 'error');
-            return;
-        }
+        if (!res.ok) { showToast(data.error || '获取结果失败', 'error'); return; }
         showLotteryResult(data);
-    } catch (e) {
-        showToast('网络错误', 'error');
-    }
+    } catch (e) { showToast('网络错误', 'error'); }
 }
 
 function showLotteryResult(data) {
     const { role, isBirthday, birthdayMessage, openingSlogan } = data;
+    const isRefresh = resultShownOnce;
+    resultShownOnce = true;
 
     document.getElementById('waitingCard').style.display = 'none';
     document.getElementById('lotteryResultCard').style.display = 'block';
@@ -629,17 +643,16 @@ function showLotteryResult(data) {
         document.getElementById('birthdayAnimation').style.display = 'block';
         document.getElementById('birthdayExtra').style.display = 'block';
         document.getElementById('birthdayMessageDisplay').textContent = birthdayMessage || '生日快乐！愿你天天开心~';
-
         if (openingSlogan) {
             document.getElementById('openingSloganDisplay').style.display = 'block';
             document.getElementById('sloganText').textContent = openingSlogan;
             document.getElementById('sloganBtn').style.display = 'block';
         }
-
         document.getElementById('resultTitle').textContent = '🎂 寿星专属角色是...';
-
-        triggerConfetti();
-        triggerDanmaku(birthdayMessage);
+        if (!isRefresh) {
+            triggerConfetti();
+            triggerDanmaku(birthdayMessage);
+        }
     } else {
         document.getElementById('birthdayAnimation').style.display = 'none';
         document.getElementById('birthdayExtra').style.display = 'none';
@@ -656,7 +669,6 @@ function showLotteryResult(data) {
     tagSpan.className = 'role-tag';
     tagSpan.textContent = role.tag;
     tagsContainer.appendChild(tagSpan);
-
     if (role.gender !== 'any') {
         const gSpan = document.createElement('span');
         gSpan.className = 'role-tag';
@@ -666,6 +678,10 @@ function showLotteryResult(data) {
 
     document.getElementById('roleCostume').textContent = role.costume;
     document.getElementById('roleLine').textContent = role.line;
+
+    if (isRefresh) {
+        showToast('🔄 角色已更新！', 'info');
+    }
 }
 
 function showSloganModal() {
@@ -684,7 +700,6 @@ function closeSloganModal() {
 function triggerConfetti() {
     const container = document.getElementById('confettiContainer');
     const colors = ['#ff6b9d', '#a29bfe', '#fdcb6e', '#00b894', '#74b9ff', '#ff7675'];
-
     for (let i = 0; i < 60; i++) {
         setTimeout(() => {
             const confetti = document.createElement('div');
@@ -693,20 +708,16 @@ function triggerConfetti() {
             confetti.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)];
             confetti.style.animationDelay = Math.random() * 0.5 + 's';
             confetti.style.animationDuration = (2 + Math.random() * 2) + 's';
-
             const shapes = ['circle', 'square', 'triangle'];
             const shape = shapes[Math.floor(Math.random() * shapes.length)];
-            if (shape === 'circle') {
-                confetti.style.borderRadius = '50%';
-            } else if (shape === 'triangle') {
-                confetti.style.width = '0';
-                confetti.style.height = '0';
+            if (shape === 'circle') { confetti.style.borderRadius = '50%'; }
+            else if (shape === 'triangle') {
+                confetti.style.width = '0'; confetti.style.height = '0';
                 confetti.style.borderLeft = '6px solid transparent';
                 confetti.style.borderRight = '6px solid transparent';
                 confetti.style.borderBottom = '12px solid ' + colors[Math.floor(Math.random() * colors.length)];
                 confetti.style.backgroundColor = 'transparent';
             }
-
             container.appendChild(confetti);
             setTimeout(() => confetti.remove(), 4000);
         }, i * 30);
@@ -716,10 +727,7 @@ function triggerConfetti() {
 function triggerDanmaku(customMessage) {
     const container = document.getElementById('danmakuContainer');
     const messages = [...birthdayDanmakuMessages];
-    if (customMessage) {
-        messages.unshift('💌 ' + customMessage);
-    }
-
+    if (customMessage) messages.unshift('💌 ' + customMessage);
     messages.forEach((msg, index) => {
         setTimeout(() => {
             const danmaku = document.createElement('div');
@@ -768,27 +776,16 @@ function saveSurpriseRecord(record) {
 function loadSurpriseList() {
     const records = JSON.parse(localStorage.getItem('birthdaySurpriseRecords') || '[]');
     const container = document.getElementById('surpriseList');
-
     if (records.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <div class="empty-emoji">🎉</div>
-                <p>还没有彩蛋记录</p>
-                <small>创建房间并设置生日彩蛋后会显示在这里</small>
-            </div>
-        `;
+        container.innerHTML = `<div class="empty-state"><div class="empty-emoji">🎉</div><p>还没有彩蛋记录</p><small>创建房间并设置生日彩蛋后会显示在这里</small></div>`;
         return;
     }
-
     container.innerHTML = '';
     records.forEach((record, index) => {
         const item = document.createElement('div');
         item.className = 'surprise-item';
         item.onclick = () => showSurpriseDetail(index);
-        item.innerHTML = `
-            <div class="surprise-item-title">🎬 ${record.scriptName}</div>
-            <div class="surprise-item-meta">🎂 ${record.birthdayPlayer} · ${record.time}</div>
-        `;
+        item.innerHTML = `<div class="surprise-item-title">🎬 ${record.scriptName}</div><div class="surprise-item-meta">🎂 ${record.birthdayPlayer} · ${record.time}</div>`;
         container.appendChild(item);
     });
 }
@@ -797,19 +794,12 @@ function showSurpriseDetail(index) {
     const records = JSON.parse(localStorage.getItem('birthdaySurpriseRecords') || '[]');
     const record = records[index];
     if (!record) return;
-
     document.getElementById('surpriseScript').textContent = record.scriptName;
     document.getElementById('surprisePlayer').textContent = record.birthdayPlayer;
     document.getElementById('surpriseMessage').textContent = record.message || '（无）';
     document.getElementById('surpriseTime').textContent = record.time;
-
-    if (record.task) {
-        document.getElementById('surpriseTaskSection').style.display = 'block';
-        document.getElementById('surpriseTaskContent').textContent = record.task;
-    } else {
-        document.getElementById('surpriseTaskSection').style.display = 'none';
-    }
-
+    if (record.task) { document.getElementById('surpriseTaskSection').style.display = 'block'; document.getElementById('surpriseTaskContent').textContent = record.task; }
+    else { document.getElementById('surpriseTaskSection').style.display = 'none'; }
     document.getElementById('surpriseDetailCard').style.display = 'block';
     document.getElementById('surpriseDetailCard').scrollIntoView({ behavior: 'smooth' });
 }
@@ -817,7 +807,6 @@ function showSurpriseDetail(index) {
 function checkUrlParams() {
     const params = new URLSearchParams(window.location.search);
     const roomId = params.get('room');
-
     if (roomId) {
         document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.module').forEach(m => m.classList.remove('active'));

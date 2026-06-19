@@ -1162,3 +1162,32 @@ textarea {
     background: #ffe0ec;
     color: var(--primary);
 }
+
+.redo-info {
+    padding: 10px 14px;
+    background: #eef7ff;
+    border-radius: 10px;
+    font-size: 13px;
+    color: #2d6cb4;
+    font-weight: 500;
+    margin-bottom: 12px;
+    text-align: center;
+}
+
+.redo-actions {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.redo-actions .btn {
+    flex: 1;
+    font-size: 14px;
+}
+
+.lock-checkbox {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--success);
+    cursor: pointer;
+}

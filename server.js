@@ -1,9 +1,11 @@
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 const PORT = 9527;
+const DATA_FILE = path.join(__dirname, 'rooms-data.json');
 
 app.use(cors());
 app.use(express.json());
@@ -39,6 +41,29 @@ const entryLines = [
 
 const avatarEmojis = ['🎭', '👑', '🎨', '🎪', '🎯', '🎸', '📚', '💎', '🌹', '🦋', '🐱', '🐶', '🦊', '🐰', '🐻'];
 
+function loadData() {
+    try {
+        if (fs.existsSync(DATA_FILE)) {
+            const raw = fs.readFileSync(DATA_FILE, 'utf-8');
+            const data = JSON.parse(raw);
+            for (const [id, room] of Object.entries(data)) {
+                rooms[id] = room;
+            }
+            console.log(`📂 已加载 ${Object.keys(data).length} 个房间数据`);
+        }
+    } catch (e) {
+        console.log('📂 无历史房间数据，从空开始');
+    }
+}
+
+function saveData() {
+    try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(rooms, null, 2), 'utf-8');
+    } catch (e) {
+        console.error('保存数据失败:', e.message);
+    }
+}
+
 function generateRoomId() {
     let id;
     do {
@@ -57,7 +82,6 @@ function canAssign(player, role, room) {
             return { ok: false, reason: 'gender' };
         }
     }
-
     const rules = room.avoidRules || [];
     for (const rule of rules) {
         if (rule.playerId !== player.id) continue;
@@ -78,13 +102,14 @@ function getAvailableRolesForPlayer(player, room, usedRoleIds) {
     });
 }
 
-function findFirstConflict(room) {
+function findAllConflicts(room) {
+    const conflicts = [];
     for (const player of room.players) {
         const available = getAvailableRolesForPlayer(player, room, new Set());
         if (available.length === 0) {
-            const genderBlocked = !room.allowCrossPlay && 
+            const genderBlocked = !room.allowCrossPlay &&
                 room.roles.every(r => r.gender !== 'any' && r.gender !== player.gender);
-            
+
             const avoidBlockedReasons = [];
             const rules = room.avoidRules || [];
             for (const rule of rules) {
@@ -94,7 +119,8 @@ function findFirstConflict(room) {
                     avoidBlockedReasons.push({
                         type: 'tag',
                         tag: rule.avoidTag,
-                        count: matchingRoles.length
+                        count: matchingRoles.length,
+                        roleNames: matchingRoles.map(r => r.name)
                     });
                 }
                 if (rule.type === 'role') {
@@ -108,40 +134,32 @@ function findFirstConflict(room) {
                 }
             }
 
-            return {
+            conflicts.push({
                 player,
                 genderBlocked,
                 avoidBlockedReasons
-            };
+            });
         }
     }
-    return null;
+    return conflicts;
 }
 
-function backtrackAssign(room) {
-    const players = [...room.players];
-    const roles = room.roles;
-
+function backtrackAssign(players, roles, room, usedRoleIds) {
     const playersWithOptions = players.map(p => ({
         player: p,
-        options: getAvailableRolesForPlayer(p, room, new Set())
+        options: getAvailableRolesForPlayer(p, room, usedRoleIds)
     }));
 
     playersWithOptions.sort((a, b) => a.options.length - b.options.length);
-
     const orderedPlayers = playersWithOptions.map(x => x.player);
 
     const assignment = {};
-    const usedRoleIds = new Set();
 
     function backtrack(playerIndex) {
-        if (playerIndex >= orderedPlayers.length) {
-            return true;
-        }
+        if (playerIndex >= orderedPlayers.length) return true;
 
         const player = orderedPlayers[playerIndex];
         const available = getAvailableRolesForPlayer(player, room, usedRoleIds);
-
         if (available.length === 0) return false;
 
         const scored = available.map(role => {
@@ -151,12 +169,10 @@ function backtrackAssign(room) {
             if (player.preference === 'detective' && role.tag === '🔍推理') score += 10;
             if (player.preference === 'edge' && role.tag === '😌边缘') score += 10;
             if (player.preference === 'emotional' && role.tag === '💧情感') score += 10;
-            
             if (!room.allowCrossPlay) {
                 if (role.gender === player.gender) score += 5;
                 else if (role.gender === 'any') score += 2;
             }
-            
             score += Math.random() * 2;
             return { role, score };
         });
@@ -166,15 +182,10 @@ function backtrackAssign(room) {
         for (const { role } of scored) {
             usedRoleIds.add(role.id);
             assignment[player.id] = role;
-
-            if (backtrack(playerIndex + 1)) {
-                return true;
-            }
-
+            if (backtrack(playerIndex + 1)) return true;
             usedRoleIds.delete(role.id);
             delete assignment[player.id];
         }
-
         return false;
     }
 
@@ -203,10 +214,8 @@ function validateRoomForLottery(room) {
         const anyRoles = room.roles.filter(r => r.gender === 'any').length;
         const malePlayers = room.players.filter(p => p.gender === 'male').length;
         const femalePlayers = room.players.filter(p => p.gender === 'female').length;
-
         const maleShort = Math.max(0, malePlayers - maleRoles);
         const femaleShort = Math.max(0, femalePlayers - femaleRoles);
-
         if (maleShort + femaleShort > anyRoles) {
             return {
                 valid: false,
@@ -215,33 +224,57 @@ function validateRoomForLottery(room) {
         }
     }
 
-    const conflict = findFirstConflict(room);
-    if (conflict) {
-        const { player, genderBlocked, avoidBlockedReasons } = conflict;
-        let reasonStr = `玩家「${player.nickname}」没有可分配的角色：`;
-        const reasons = [];
-        if (genderBlocked) {
-            reasons.push(`性别不匹配（关闭反串后，所有角色的性别都不符合${player.gender === 'male' ? '男生' : '女生'}）`);
-        }
-        if (avoidBlockedReasons && avoidBlockedReasons.length > 0) {
-            avoidBlockedReasons.forEach(r => {
-                if (r.type === 'tag') {
-                    reasons.push(`设置了避开「${r.tag}」标签（共 ${r.count} 个角色）`);
-                }
-                if (r.type === 'role') {
-                    reasons.push(`设置了避开角色「${r.roleName}」`);
-                }
-            });
-        }
-        reasonStr += reasons.join('，') + '。请调整避开规则或开启反串。';
-        return { valid: false, error: reasonStr };
-    }
-
-    const assignment = backtrackAssign(room);
-    if (!assignment) {
+    const conflicts = findAllConflicts(room);
+    if (conflicts.length > 0) {
+        const parts = conflicts.map(c => {
+            const reasons = [];
+            if (c.genderBlocked) {
+                reasons.push(`性别不匹配（关闭反串后无符合${c.player.gender === 'male' ? '男生' : '女生'}的角色）`);
+            }
+            if (c.avoidBlockedReasons && c.avoidBlockedReasons.length > 0) {
+                c.avoidBlockedReasons.forEach(r => {
+                    if (r.type === 'tag') {
+                        reasons.push(`避开「${r.tag}」标签（涉及角色：${r.roleNames.join('、')}）`);
+                    }
+                    if (r.type === 'role') {
+                        reasons.push(`避开角色「${r.roleName}」`);
+                    }
+                });
+            }
+            return `「${c.player.nickname}」${reasons.join('，')}`;
+        });
         return {
             valid: false,
-            error: '角色分配无解：综合性别和避开规则后无法为每个人分配到符合条件的角色。请减少避开规则或开启反串。'
+            error: `以下玩家没有可分配的角色：${parts.join('；')}。请调整避开规则或开启反串。`
+        };
+    }
+
+    const assignment = backtrackAssign(room.players, room.roles, room, new Set());
+    if (!assignment) {
+        const details = [];
+        const rules = room.avoidRules || [];
+        const ruleMap = {};
+        for (const rule of rules) {
+            if (!ruleMap[rule.playerId]) ruleMap[rule.playerId] = [];
+            const player = room.players.find(p => p.id === rule.playerId);
+            if (rule.type === 'tag') {
+                ruleMap[rule.playerId].push(`避开标签「${rule.avoidTag}」`);
+            }
+            if (rule.type === 'role') {
+                const role = room.roles.find(r => r.id === rule.avoidRoleId);
+                if (role) ruleMap[rule.playerId].push(`避开角色「${role.name}」`);
+            }
+        }
+        for (const [pid, rls] of Object.entries(ruleMap)) {
+            const player = room.players.find(p => p.id === pid);
+            if (player) details.push(`「${player.nickname}」${rls.join('、')}`);
+        }
+        const detailStr = details.length > 0
+            ? `涉及规则：${details.join('；')}。`
+            : '';
+        return {
+            valid: false,
+            error: `角色分配无解：${detailStr}综合性别和避开规则后无法为每个人分配到符合条件的角色。请减少避开规则或开启反串。`
         };
     }
 
@@ -250,15 +283,18 @@ function validateRoomForLottery(room) {
 
 function assignRoles(room) {
     const result = validateRoomForLottery(room);
-    if (!result.valid) {
-        return { error: result.error };
-    }
+    if (!result.valid) return { error: result.error };
     return { results: result.assignment };
+}
+
+function getSafeRoom(room) {
+    const safe = { ...room };
+    delete safe.creatorToken;
+    return safe;
 }
 
 app.post('/api/rooms', (req, res) => {
     const { scriptName, playerCount, allowCrossPlay, roles, birthdayMessage, openingSlogan, surpriseTask } = req.body;
-
     if (!scriptName || !playerCount || !roles || roles.length === 0) {
         return res.status(400).json({ error: '缺少必要参数' });
     }
@@ -287,6 +323,7 @@ app.post('/api/rooms', (req, res) => {
         surpriseTask: surpriseTask || '',
         birthdayPlayerId: null,
         avoidRules: [],
+        lockedPlayers: [],
         players: [],
         status: 'waiting',
         createdAt: Date.now(),
@@ -294,42 +331,24 @@ app.post('/api/rooms', (req, res) => {
         creatorToken
     };
 
-    res.json({ roomId, creatorToken, room: rooms[roomId] });
+    saveData();
+    res.json({ roomId, creatorToken, room: getSafeRoom(rooms[roomId]) });
 });
 
 app.get('/api/rooms/:id', (req, res) => {
     const room = rooms[req.params.id];
-    if (!room) {
-        return res.status(404).json({ error: '房间不存在' });
-    }
-    const safeRoom = { ...room };
-    delete safeRoom.creatorToken;
-    if (safeRoom.lotteryResults) {
-        const safeResults = {};
-        for (const [pid, role] of Object.entries(safeRoom.lotteryResults)) {
-            safeResults[pid] = role;
-        }
-        safeRoom.lotteryResults = safeResults;
-    }
-    res.json(safeRoom);
+    if (!room) return res.status(404).json({ error: '房间不存在' });
+    res.json(getSafeRoom(room));
 });
 
 app.post('/api/rooms/:id/join', (req, res) => {
     const room = rooms[req.params.id];
-    if (!room) {
-        return res.status(404).json({ error: '房间不存在' });
-    }
-    if (room.status !== 'waiting') {
-        return res.status(400).json({ error: '房间已开始抽签' });
-    }
-    if (room.players.length >= room.playerCount) {
-        return res.status(400).json({ error: '房间人数已满' });
-    }
+    if (!room) return res.status(404).json({ error: '房间不存在' });
+    if (room.status !== 'waiting') return res.status(400).json({ error: '房间已开始抽签' });
+    if (room.players.length >= room.playerCount) return res.status(400).json({ error: '房间人数已满' });
 
     const { nickname, preference, gender } = req.body;
-    if (!nickname || !nickname.trim()) {
-        return res.status(400).json({ error: '请输入昵称' });
-    }
+    if (!nickname || !nickname.trim()) return res.status(400).json({ error: '请输入昵称' });
 
     const playerId = generatePlayerId();
     const player = {
@@ -341,95 +360,142 @@ app.post('/api/rooms/:id/join', (req, res) => {
     };
 
     room.players.push(player);
+    saveData();
 
-    const safeRoom = { ...room };
-    delete safeRoom.creatorToken;
-
-    res.json({ playerId, player, room: safeRoom });
+    res.json({ playerId, player, room: getSafeRoom(room) });
 });
 
 app.post('/api/rooms/:id/birthday', (req, res) => {
     const room = rooms[req.params.id];
-    if (!room) {
-        return res.status(404).json({ error: '房间不存在' });
-    }
+    if (!room) return res.status(404).json({ error: '房间不存在' });
 
     const { playerId, creatorToken } = req.body;
-    if (creatorToken !== room.creatorToken) {
-        return res.status(403).json({ error: '只有发起人可以设置' });
-    }
-
-    const player = room.players.find(p => p.id === playerId);
-    if (!player && playerId !== null) {
+    if (creatorToken !== room.creatorToken) return res.status(403).json({ error: '只有发起人可以设置' });
+    if (playerId !== null && !room.players.find(p => p.id === playerId)) {
         return res.status(400).json({ error: '玩家不存在' });
     }
 
     room.birthdayPlayerId = playerId || null;
+    saveData();
 
-    const safeRoom = { ...room };
-    delete safeRoom.creatorToken;
-    res.json({ success: true, room: safeRoom });
+    res.json({ success: true, room: getSafeRoom(room) });
 });
 
 app.post('/api/rooms/:id/avoid', (req, res) => {
     const room = rooms[req.params.id];
-    if (!room) {
-        return res.status(404).json({ error: '房间不存在' });
-    }
+    if (!room) return res.status(404).json({ error: '房间不存在' });
 
     const { creatorToken, rules } = req.body;
-    if (creatorToken !== room.creatorToken) {
-        return res.status(403).json({ error: '只有发起人可以设置' });
-    }
+    if (creatorToken !== room.creatorToken) return res.status(403).json({ error: '只有发起人可以设置' });
 
     room.avoidRules = rules || [];
+    saveData();
 
-    const safeRoom = { ...room };
-    delete safeRoom.creatorToken;
-    res.json({ success: true, room: safeRoom });
+    res.json({ success: true, room: getSafeRoom(room) });
 });
 
 app.post('/api/rooms/:id/lottery', (req, res) => {
     const room = rooms[req.params.id];
-    if (!room) {
-        return res.status(404).json({ error: '房间不存在' });
-    }
+    if (!room) return res.status(404).json({ error: '房间不存在' });
 
     const { creatorToken } = req.body;
-    if (creatorToken !== room.creatorToken) {
-        return res.status(403).json({ error: '只有发起人可以开始抽签' });
-    }
-
+    if (creatorToken !== room.creatorToken) return res.status(403).json({ error: '只有发起人可以开始抽签' });
     if (room.players.length < room.playerCount) {
         return res.status(400).json({ error: `还差 ${room.playerCount - room.players.length} 位玩家` });
     }
 
     const assignResult = assignRoles(room);
-    if (assignResult.error) {
-        return res.status(400).json({ error: assignResult.error });
-    }
+    if (assignResult.error) return res.status(400).json({ error: assignResult.error });
 
     room.lotteryResults = assignResult.results;
     room.status = 'lottery-done';
+    room.lockedPlayers = [];
+    saveData();
 
-    const safeRoom = { ...room };
-    delete safeRoom.creatorToken;
-    res.json({ success: true, room: safeRoom });
+    res.json({ success: true, room: getSafeRoom(room) });
+});
+
+app.post('/api/rooms/:id/lock', (req, res) => {
+    const room = rooms[req.params.id];
+    if (!room) return res.status(404).json({ error: '房间不存在' });
+
+    const { creatorToken, lockedPlayerIds } = req.body;
+    if (creatorToken !== room.creatorToken) return res.status(403).json({ error: '只有发起人可以设置' });
+    if (room.status !== 'lottery-done') return res.status(400).json({ error: '尚未开奖，无法锁定' });
+
+    room.lockedPlayers = lockedPlayerIds || [];
+    saveData();
+
+    res.json({ success: true, room: getSafeRoom(room) });
+});
+
+app.post('/api/rooms/:id/redo-lottery', (req, res) => {
+    const room = rooms[req.params.id];
+    if (!room) return res.status(404).json({ error: '房间不存在' });
+
+    const { creatorToken } = req.body;
+    if (creatorToken !== room.creatorToken) return res.status(403).json({ error: '只有发起人可以重抽' });
+    if (room.status !== 'lottery-done') return res.status(400).json({ error: '尚未开奖，无法重抽' });
+    if (!room.lotteryResults) return res.status(400).json({ error: '没有开奖结果' });
+
+    const locked = new Set(room.lockedPlayers || []);
+    const playersToRedraw = room.players.filter(p => !locked.has(p.id));
+    const usedRoleIds = new Set();
+
+    for (const pid of locked) {
+        const role = room.lotteryResults[pid];
+        if (role) usedRoleIds.add(role.id);
+    }
+
+    if (playersToRedraw.length === 0) {
+        return res.status(400).json({ error: '没有需要重抽的玩家，请先取消一些锁定' });
+    }
+
+    const virtualRoom = {
+        ...room,
+        players: playersToRedraw,
+        roles: room.roles
+    };
+
+    const assignment = backtrackAssign(virtualRoom.players, virtualRoom.roles, virtualRoom, usedRoleIds);
+    if (!assignment) {
+        const conflicts = findAllConflicts(virtualRoom);
+        if (conflicts.length > 0) {
+            const parts = conflicts.map(c => {
+                const reasons = [];
+                if (c.genderBlocked) reasons.push(`性别不匹配`);
+                if (c.avoidBlockedReasons && c.avoidBlockedReasons.length > 0) {
+                    c.avoidBlockedReasons.forEach(r => {
+                        if (r.type === 'tag') reasons.push(`避开「${r.tag}」标签`);
+                        if (r.type === 'role') reasons.push(`避开角色「${r.roleName}」`);
+                    });
+                }
+                return `「${c.player.nickname}」${reasons.join('，')}`;
+            });
+            return res.status(400).json({ error: `重抽失败，以下玩家无法分配：${parts.join('；')}。请调整避开规则或锁定设置。` });
+        }
+        return res.status(400).json({ error: '重抽失败：剩余角色和玩家无法匹配。请调整锁定设置或避开规则。' });
+    }
+
+    const newResults = { ...room.lotteryResults };
+    for (const [pid, role] of Object.entries(assignment)) {
+        newResults[pid] = role;
+    }
+    room.lotteryResults = newResults;
+    room.lockedPlayers = [];
+    room.redoCount = (room.redoCount || 0) + 1;
+    saveData();
+
+    res.json({ success: true, room: getSafeRoom(room) });
 });
 
 app.get('/api/rooms/:id/result/:playerId', (req, res) => {
     const room = rooms[req.params.id];
-    if (!room) {
-        return res.status(404).json({ error: '房间不存在' });
-    }
-    if (!room.lotteryResults) {
-        return res.status(400).json({ error: '抽签尚未完成' });
-    }
+    if (!room) return res.status(404).json({ error: '房间不存在' });
+    if (!room.lotteryResults) return res.status(400).json({ error: '抽签尚未完成' });
 
     const role = room.lotteryResults[req.params.playerId];
-    if (!role) {
-        return res.status(404).json({ error: '未找到你的抽签结果' });
-    }
+    if (!role) return res.status(404).json({ error: '未找到你的抽签结果' });
 
     const isBirthday = room.birthdayPlayerId === req.params.playerId;
 
@@ -445,16 +511,17 @@ app.get('/api/rooms/:id/result/:playerId', (req, res) => {
 
 app.get('/api/rooms/:id/players', (req, res) => {
     const room = rooms[req.params.id];
-    if (!room) {
-        return res.status(404).json({ error: '房间不存在' });
-    }
+    if (!room) return res.status(404).json({ error: '房间不存在' });
     res.json({
         players: room.players,
         birthdayPlayerId: room.birthdayPlayerId,
         avoidRules: room.avoidRules,
+        lockedPlayers: room.lockedPlayers || [],
         status: room.status
     });
 });
+
+loadData();
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`🎂 生日剧本杀服务器运行在 http://localhost:${PORT}`);

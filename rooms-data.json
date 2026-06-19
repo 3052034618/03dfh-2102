@@ -1,0 +1,203 @@
+{
+  "254619": {
+    "id": "254619",
+    "scriptName": "测试剧本",
+    "playerCount": 4,
+    "allowCrossPlay": true,
+    "roles": [
+      {
+        "id": 0,
+        "name": "大太太",
+        "gender": "female",
+        "tag": "🔥高能",
+        "costume": "酷炫机车风了解一下",
+        "line": "\"各位好，我是这个故事的见证者。\"",
+        "avatar": "🎭"
+      },
+      {
+        "id": 1,
+        "name": "二少爷",
+        "gender": "male",
+        "tag": "😂搞笑",
+        "costume": "简约风格就好，不要太花哨",
+        "line": "\"真相，往往藏在最不起眼的地方。\"",
+        "avatar": "👑"
+      },
+      {
+        "id": 2,
+        "name": "管家",
+        "gender": "male",
+        "tag": "🔍推理",
+        "costume": "甜美可爱风格最适合",
+        "line": "\"诸位，请允许我自我介绍一下。\"",
+        "avatar": "🎨"
+      },
+      {
+        "id": 3,
+        "name": "厨子",
+        "gender": "any",
+        "tag": "😌边缘",
+        "costume": "甜美可爱风格最适合",
+        "line": "\"命运的齿轮，已经开始转动。\"",
+        "avatar": "🎪"
+      }
+    ],
+    "birthdayMessage": "生日快乐！",
+    "openingSlogan": "出发！",
+    "surpriseTask": "一起唱生日歌",
+    "birthdayPlayerId": "p_owxb5rjf",
+    "avoidRules": [
+      {
+        "type": "role",
+        "playerId": "p_zv6ok3yy",
+        "avoidRoleId": 2
+      },
+      {
+        "type": "tag",
+        "playerId": "p_geqykasq",
+        "avoidTag": "😌边缘"
+      }
+    ],
+    "lockedPlayers": [],
+    "players": [
+      {
+        "id": "p_zv6ok3yy",
+        "nickname": "小明",
+        "preference": "detective",
+        "gender": "male",
+        "joinedAt": 1781891520432
+      },
+      {
+        "id": "p_owxb5rjf",
+        "nickname": "小红",
+        "preference": "high-energy",
+        "gender": "female",
+        "joinedAt": 1781891520436
+      },
+      {
+        "id": "p_geqykasq",
+        "nickname": "小刚",
+        "preference": "funny",
+        "gender": "male",
+        "joinedAt": 1781891520440
+      },
+      {
+        "id": "p_hbluvdyr",
+        "nickname": "小美",
+        "preference": "emotional",
+        "gender": "female",
+        "joinedAt": 1781891520443
+      }
+    ],
+    "status": "lottery-done",
+    "createdAt": 1781891520412,
+    "lotteryResults": {
+      "p_zv6ok3yy": {
+        "id": 3,
+        "name": "厨子",
+        "gender": "any",
+        "tag": "😌边缘",
+        "costume": "甜美可爱风格最适合",
+        "line": "\"命运的齿轮，已经开始转动。\"",
+        "avatar": "🎪"
+      },
+      "p_geqykasq": {
+        "id": 1,
+        "name": "二少爷",
+        "gender": "male",
+        "tag": "😂搞笑",
+        "costume": "简约风格就好，不要太花哨",
+        "line": "\"真相，往往藏在最不起眼的地方。\"",
+        "avatar": "👑"
+      },
+      "p_owxb5rjf": {
+        "id": 0,
+        "name": "大太太",
+        "gender": "female",
+        "tag": "🔥高能",
+        "costume": "酷炫机车风了解一下",
+        "line": "\"各位好，我是这个故事的见证者。\"",
+        "avatar": "🎭"
+      },
+      "p_hbluvdyr": {
+        "id": 2,
+        "name": "管家",
+        "gender": "male",
+        "tag": "🔍推理",
+        "costume": "甜美可爱风格最适合",
+        "line": "\"诸位，请允许我自我介绍一下。\"",
+        "avatar": "🎨"
+      }
+    },
+    "creatorToken": "ct_3f2eykikknc",
+    "redoCount": 1
+  },
+  "494744": {
+    "id": "494744",
+    "scriptName": "冲突测试",
+    "playerCount": 3,
+    "allowCrossPlay": false,
+    "roles": [
+      {
+        "id": 0,
+        "name": "角色A",
+        "gender": "male",
+        "tag": "🔥高能",
+        "costume": "简约风格就好，不要太花哨",
+        "line": "\"别来无恙啊，各位。\"",
+        "avatar": "🎭"
+      },
+      {
+        "id": 1,
+        "name": "角色B",
+        "gender": "male",
+        "tag": "😂搞笑",
+        "costume": "酷炫机车风了解一下",
+        "line": "\"让我们开始吧，时间不多了。\"",
+        "avatar": "👑"
+      },
+      {
+        "id": 2,
+        "name": "角色C",
+        "gender": "female",
+        "tag": "🔍推理",
+        "costume": "建议穿着复古风服装，搭配精致配饰",
+        "line": "\"诸位，请允许我自我介绍一下。\"",
+        "avatar": "🎨"
+      }
+    ],
+    "birthdayMessage": "",
+    "openingSlogan": "",
+    "surpriseTask": "",
+    "birthdayPlayerId": null,
+    "avoidRules": [],
+    "lockedPlayers": [],
+    "players": [
+      {
+        "id": "p_1ea37x3t",
+        "nickname": "女1",
+        "preference": "any",
+        "gender": "female",
+        "joinedAt": 1781891520475
+      },
+      {
+        "id": "p_yvfzfuqm",
+        "nickname": "女2",
+        "preference": "any",
+        "gender": "female",
+        "joinedAt": 1781891520477
+      },
+      {
+        "id": "p_vsmijgvt",
+        "nickname": "男1",
+        "preference": "any",
+        "gender": "male",
+        "joinedAt": 1781891520479
+      }
+    ],
+    "status": "waiting",
+    "createdAt": 1781891520473,
+    "lotteryResults": null,
+    "creatorToken": "ct_79xya19frbl"
+  }
+}

@@ -132,6 +132,11 @@
                     <h2 class="card-title">🎉 抽签已完成！</h2>
                     <p class="info-text">所有玩家已分配角色，请各位在自己的设备上查看结果。</p>
                     <div id="creatorResultList" class="result-list"></div>
+                    <div id="redoInfo" class="redo-info" style="display: none;"></div>
+                    <div class="redo-actions">
+                        <button class="btn btn-secondary" id="redoLotteryBtn" onclick="redoLottery()" style="display: none;">🔄 全部重抽</button>
+                        <button class="btn btn-primary" id="lockAndRedoBtn" onclick="lockAndRedoLottery()" style="display: none;">🔒 锁定选中并重抽</button>
+                    </div>
                     <button class="btn btn-secondary" onclick="copyRoomLink()">📋 再复制一次链接</button>
                 </div>
             </section>
