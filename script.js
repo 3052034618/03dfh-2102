@@ -119,6 +119,11 @@ async function createRoom() {
         });
     });
 
+    if (roles.length !== playerCount) {
+        showToast(`角色数量（${roles.length}个）和玩家人数（${playerCount}人）不一致，请调整~`, 'error');
+        return;
+    }
+
     try {
         const res = await fetch(`${API}/api/rooms`, {
             method: 'POST',
@@ -199,9 +204,15 @@ function startCreatorPolling() {
                 return;
             }
             updateCreatorPlayerList(room);
-            checkGenderValidation(room);
+            checkRoomValidation(room);
+            updateAllAvoidRoleOptions(room);
         } catch (e) { }
     }, 2000);
+}
+
+function updateAllAvoidRoleOptions(room) {
+    const roleSelects = document.querySelectorAll('#creatorAvoidRules .avoid-rule-role');
+    roleSelects.forEach(sel => updateAvoidRoleOptions(room, sel));
 }
 
 function updateCreatorPlayerList(room) {
@@ -293,28 +304,61 @@ function updateAvoidRulePlayerOptions(room) {
     });
 }
 
+function updateAvoidRoleOptions(room, selectEl) {
+    const curVal = selectEl.value;
+    selectEl.innerHTML = '<option value="">选择角色</option>';
+    room.roles.forEach(r => {
+        const opt = document.createElement('option');
+        opt.value = r.id;
+        opt.textContent = r.name;
+        select.appendChild(opt);
+    });
+    if (curVal !== undefined && curVal !== '') selectEl.value = curVal;
+}
+
 function addCreatorAvoidRule() {
     const container = document.getElementById('creatorAvoidRules');
-    const room = null;
 
     const tagOptions = roleTags.map(t => `<option value="${t}">${t}</option>`).join('');
 
     const row = document.createElement('div');
     row.className = 'avoid-rule-item';
     row.innerHTML = `
-        <select class="avoid-rule-player">
+        <select class="avoid-rule-player" style="min-width:100px;">
             <option value="">选择玩家</option>
         </select>
         <span style="color:var(--text-light);font-size:13px;">避开</span>
-        <select class="avoid-rule-tag">
+        <select class="avoid-rule-type" style="width:80px;">
+            <option value="tag">标签</option>
+            <option value="role">角色</option>
+        </select>
+        <select class="avoid-rule-tag" style="min-width:90px;">
             ${tagOptions}
+        </select>
+        <select class="avoid-rule-role" style="display:none;min-width:90px;">
+            <option value="">选择角色</option>
         </select>
         <button class="remove-btn" onclick="this.parentElement.remove()">×</button>
     `;
     container.appendChild(row);
 
+    const typeSelect = row.querySelector('.avoid-rule-type');
+    const tagSelect = row.querySelector('.avoid-rule-tag');
+    const roleSelect = row.querySelector('.avoid-rule-role');
+
+    typeSelect.addEventListener('change', () => {
+        if (typeSelect.value === 'tag') {
+            tagSelect.style.display = '';
+            roleSelect.style.display = 'none';
+        } else {
+            tagSelect.style.display = 'none';
+            roleSelect.style.display = '';
+        }
+    });
+
     fetch(`${API}/api/rooms/${currentRoomId}`).then(r => r.json()).then(room => {
         updateAvoidRulePlayerOptions(room);
+        updateAvoidRoleOptions(room, roleSelect);
     });
 }
 
@@ -323,9 +367,15 @@ async function collectAndSaveAvoidRules() {
     const rows = document.querySelectorAll('#creatorAvoidRules .avoid-rule-item');
     rows.forEach(row => {
         const playerId = row.querySelector('.avoid-rule-player').value;
-        const avoidTag = row.querySelector('.avoid-rule-tag').value;
-        if (playerId && avoidTag) {
-            rules.push({ playerId, avoidTag });
+        const type = row.querySelector('.avoid-rule-type').value;
+        if (!playerId) return;
+
+        if (type === 'tag') {
+            const avoidTag = row.querySelector('.avoid-rule-tag').value;
+            if (avoidTag) rules.push({ type, playerId, avoidTag });
+        } else {
+            const avoidRoleId = parseInt(row.querySelector('.avoid-rule-role').value);
+            if (!isNaN(avoidRoleId)) rules.push({ type, playerId, avoidRoleId });
         }
     });
 
@@ -338,34 +388,58 @@ async function collectAndSaveAvoidRules() {
     } catch (e) { }
 }
 
-function checkGenderValidation(room) {
-    if (room.allowCrossPlay || room.players.length === 0) {
-        document.getElementById('genderValidationMsg').style.display = 'none';
+function checkRoomValidation(room) {
+    const btn = document.getElementById('startLotteryBtn');
+    const warningBox = document.getElementById('genderValidationMsg');
+    const warningText = document.getElementById('genderWarningText');
+
+    if (room.players.length === 0) {
+        warningBox.style.display = 'none';
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
         return;
     }
 
-    const maleRoles = room.roles.filter(r => r.gender === 'male').length;
-    const femaleRoles = room.roles.filter(r => r.gender === 'female').length;
-    const anyRoles = room.roles.filter(r => r.gender === 'any').length;
-    const malePlayers = room.players.filter(p => p.gender === 'male').length;
-    const femalePlayers = room.players.filter(p => p.gender === 'female').length;
-
-    const maleShort = Math.max(0, malePlayers - maleRoles);
-    const femaleShort = Math.max(0, femalePlayers - femaleRoles);
-
-    if (maleShort + femaleShort > anyRoles) {
-        document.getElementById('genderValidationMsg').style.display = 'block';
-        document.getElementById('genderWarningText').innerHTML =
-            `⚠️ 当前角色性别配置无法分配：需要 ${maleRoles} 个男角色但有 ${malePlayers} 个男玩家，` +
-            `需要 ${femaleRoles} 个女角色但有 ${femalePlayers} 个女玩家。"不限"角色仅 ${anyRoles} 个，不足以补差。` +
-            `请开启反串或调整角色性别。`;
-        document.getElementById('startLotteryBtn').disabled = true;
-        document.getElementById('startLotteryBtn').style.opacity = '0.5';
-    } else {
-        document.getElementById('genderValidationMsg').style.display = 'none';
-        document.getElementById('startLotteryBtn').disabled = false;
-        document.getElementById('startLotteryBtn').style.opacity = '1';
+    if (room.roles.length !== room.playerCount) {
+        warningBox.style.display = 'block';
+        warningText.innerHTML = `⚠️ 角色数量不匹配：设置了 ${room.playerCount} 位玩家，但有 ${room.roles.length} 个角色。${room.roles.length < room.playerCount ? '角色不够，请添加角色' : '角色太多，请删除角色'}。`;
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        return;
     }
+
+    if (room.players.length < room.playerCount) {
+        warningBox.style.display = 'none';
+        btn.disabled = true;
+        btn.style.opacity = '0.5';
+        return;
+    }
+
+    if (!room.allowCrossPlay) {
+        const maleRoles = room.roles.filter(r => r.gender === 'male').length;
+        const femaleRoles = room.roles.filter(r => r.gender === 'female').length;
+        const anyRoles = room.roles.filter(r => r.gender === 'any').length;
+        const malePlayers = room.players.filter(p => p.gender === 'male').length;
+        const femalePlayers = room.players.filter(p => p.gender === 'female').length;
+
+        const maleShort = Math.max(0, malePlayers - maleRoles);
+        const femaleShort = Math.max(0, femalePlayers - femaleRoles);
+
+        if (maleShort + femaleShort > anyRoles) {
+            warningBox.style.display = 'block';
+            warningText.innerHTML =
+                `⚠️ 性别匹配失败：有 ${malePlayers} 个男玩家但只有 ${maleRoles} 个男角色，` +
+                `有 ${femalePlayers} 个女玩家但只有 ${femaleRoles} 个女角色。"不限"角色仅 ${anyRoles} 个，不足以补差。` +
+                `请开启反串或调整角色性别。`;
+            btn.disabled = true;
+            btn.style.opacity = '0.5';
+            return;
+        }
+    }
+
+    warningBox.style.display = 'none';
+    btn.disabled = false;
+    btn.style.opacity = '1';
 }
 
 async function startLottery() {
@@ -379,12 +453,8 @@ async function startLottery() {
         });
         const data = await res.json();
         if (!res.ok) {
-            if (data.error && data.error.includes('性别')) {
-                document.getElementById('genderErrorText').textContent = data.error;
-                document.getElementById('genderErrorModal').style.display = 'flex';
-            } else {
-                showToast(data.error || '抽签失败', 'error');
-            }
+            document.getElementById('genderErrorText').textContent = data.error || '抽签失败';
+            document.getElementById('genderErrorModal').style.display = 'flex';
             return;
         }
 

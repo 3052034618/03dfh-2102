@@ -3,7 +3,7 @@ const cors = require('cors');
 const path = require('path');
 
 const app = express();
-const PORT = 3000;
+const PORT = 9527;
 
 app.use(cors());
 app.use(express.json());
@@ -51,135 +51,209 @@ function generatePlayerId() {
     return 'p_' + Math.random().toString(36).substring(2, 10);
 }
 
-function validateGenderMatch(room) {
-    if (room.allowCrossPlay) return { valid: true };
-
-    const maleRoles = room.roles.filter(r => r.gender === 'male').length;
-    const femaleRoles = room.roles.filter(r => r.gender === 'female').length;
-    const anyRoles = room.roles.filter(r => r.gender === 'any').length;
-
-    const malePlayers = room.players.filter(p => p.gender === 'male').length;
-    const femalePlayers = room.players.filter(p => p.gender === 'female').length;
-
-    const maleShort = Math.max(0, malePlayers - maleRoles);
-    const femaleShort = Math.max(0, femalePlayers - femaleRoles);
-
-    if (maleShort + femaleShort > anyRoles) {
-        return {
-            valid: false,
-            message: `性别匹配失败：需要 ${maleRoles} 个男角色但来了 ${malePlayers} 个男玩家，需要 ${femaleRoles} 个女角色但来了 ${femalePlayers} 个女玩家，"不限"角色仅 ${anyRoles} 个不足以补差。请开启反串或调整角色性别设置。`
-        };
-    }
-
-    return { valid: true };
-}
-
-function calculateMatchScore(player, role, room) {
-    let score = 0;
-
-    if (player.preference === 'high-energy' && role.tag === '🔥高能') score += 10;
-    if (player.preference === 'funny' && role.tag === '😂搞笑') score += 10;
-    if (player.preference === 'detective' && role.tag === '🔍推理') score += 10;
-    if (player.preference === 'edge' && role.tag === '😌边缘') score += 10;
-    if (player.preference === 'emotional' && role.tag === '💧情感') score += 10;
-
-    if (role.gender === 'any') {
-        score += 3;
-    } else if (role.gender === player.gender) {
-        score += 5;
-    } else if (!room.allowCrossPlay) {
-        score -= 100;
-    }
-
-    return score;
-}
-
-function isRoleAvoided(playerId, role, room) {
-    if (!room.avoidRules || room.avoidRules.length === 0) return false;
-
-    for (const rule of room.avoidRules) {
-        if (rule.playerId === playerId) {
-            if (rule.avoidTag === role.tag) return true;
-            if (rule.avoidTag === '💕情侣' && role.tag === '💕情侣') return true;
-        }
-        if (rule.type === 'pair' && rule.playerIds && rule.playerIds.includes(playerId)) {
-            if (rule.avoidTag === role.tag) return true;
+function canAssign(player, role, room) {
+    if (!room.allowCrossPlay) {
+        if (role.gender !== 'any' && role.gender !== player.gender) {
+            return { ok: false, reason: 'gender' };
         }
     }
-    return false;
+
+    const rules = room.avoidRules || [];
+    for (const rule of rules) {
+        if (rule.playerId !== player.id) continue;
+        if (rule.type === 'tag' && rule.avoidTag === role.tag) {
+            return { ok: false, reason: 'avoidTag', rule };
+        }
+        if (rule.type === 'role' && rule.avoidRoleId === role.id) {
+            return { ok: false, reason: 'avoidRole', rule };
+        }
+    }
+    return { ok: true };
 }
 
-function assignRoles(room) {
-    const players = room.players;
-    const roles = room.roles;
-    const results = {};
-
-    const genderValidation = validateGenderMatch(room);
-    if (!genderValidation.valid) {
-        return { error: genderValidation.message };
-    }
-
-    const assignedRoles = new Set();
-
-    const priorityOrder = [...players].sort((a, b) => {
-        const aAvoid = (room.avoidRules || []).filter(r => r.playerId === a.id || (r.playerIds && r.playerIds.includes(a.id))).length;
-        const bAvoid = (room.avoidRules || []).filter(r => r.playerId === b.id || (r.playerIds && r.playerIds.includes(b.id))).length;
-        return bAvoid - aAvoid;
+function getAvailableRolesForPlayer(player, room, usedRoleIds) {
+    return room.roles.filter(role => {
+        if (usedRoleIds.has(role.id)) return false;
+        return canAssign(player, role, room).ok;
     });
+}
 
-    if (room.birthdayPlayerId) {
-        const bpIndex = players.findIndex(p => p.id === room.birthdayPlayerId);
-        if (bpIndex !== -1) {
-            const bp = players[bpIndex];
-            const idx = priorityOrder.findIndex(p => p.id === bp.id);
-            if (idx !== -1) {
-                priorityOrder.splice(idx, 1);
-                priorityOrder.unshift(bp);
+function findFirstConflict(room) {
+    for (const player of room.players) {
+        const available = getAvailableRolesForPlayer(player, room, new Set());
+        if (available.length === 0) {
+            const genderBlocked = !room.allowCrossPlay && 
+                room.roles.every(r => r.gender !== 'any' && r.gender !== player.gender);
+            
+            const avoidBlockedReasons = [];
+            const rules = room.avoidRules || [];
+            for (const rule of rules) {
+                if (rule.playerId !== player.id) continue;
+                if (rule.type === 'tag') {
+                    const matchingRoles = room.roles.filter(r => r.tag === rule.avoidTag);
+                    avoidBlockedReasons.push({
+                        type: 'tag',
+                        tag: rule.avoidTag,
+                        count: matchingRoles.length
+                    });
+                }
+                if (rule.type === 'role') {
+                    const role = room.roles.find(r => r.id === rule.avoidRoleId);
+                    if (role) {
+                        avoidBlockedReasons.push({
+                            type: 'role',
+                            roleName: role.name
+                        });
+                    }
+                }
             }
+
+            return {
+                player,
+                genderBlocked,
+                avoidBlockedReasons
+            };
         }
     }
+    return null;
+}
 
-    for (const player of priorityOrder) {
-        const availableRoles = roles
-            .map((role, index) => ({ role, index }))
-            .filter(item => !assignedRoles.has(item.index));
+function backtrackAssign(room) {
+    const players = [...room.players];
+    const roles = room.roles;
 
-        if (availableRoles.length === 0) break;
+    const playersWithOptions = players.map(p => ({
+        player: p,
+        options: getAvailableRolesForPlayer(p, room, new Set())
+    }));
 
-        let candidates = availableRoles.filter(item => !isRoleAvoided(player.id, item.role, room));
+    playersWithOptions.sort((a, b) => a.options.length - b.options.length);
 
-        if (candidates.length === 0) {
-            candidates = availableRoles;
+    const orderedPlayers = playersWithOptions.map(x => x.player);
+
+    const assignment = {};
+    const usedRoleIds = new Set();
+
+    function backtrack(playerIndex) {
+        if (playerIndex >= orderedPlayers.length) {
+            return true;
         }
 
-        const scored = candidates.map(item => ({
-            ...item,
-            score: calculateMatchScore(player, item.role, room)
-        }));
+        const player = orderedPlayers[playerIndex];
+        const available = getAvailableRolesForPlayer(player, room, usedRoleIds);
+
+        if (available.length === 0) return false;
+
+        const scored = available.map(role => {
+            let score = 0;
+            if (player.preference === 'high-energy' && role.tag === '🔥高能') score += 10;
+            if (player.preference === 'funny' && role.tag === '😂搞笑') score += 10;
+            if (player.preference === 'detective' && role.tag === '🔍推理') score += 10;
+            if (player.preference === 'edge' && role.tag === '😌边缘') score += 10;
+            if (player.preference === 'emotional' && role.tag === '💧情感') score += 10;
+            
+            if (!room.allowCrossPlay) {
+                if (role.gender === player.gender) score += 5;
+                else if (role.gender === 'any') score += 2;
+            }
+            
+            score += Math.random() * 2;
+            return { role, score };
+        });
 
         scored.sort((a, b) => b.score - a.score);
 
-        if (!room.allowCrossPlay) {
-            const genderOk = scored.filter(s => {
-                if (s.role.gender === 'any') return true;
-                return s.role.gender === player.gender;
-            });
-            if (genderOk.length > 0) {
-                const topGender = genderOk.slice(0, Math.min(2, genderOk.length));
-                const selected = topGender[Math.floor(Math.random() * topGender.length)];
-                results[player.id] = selected.role;
-                assignedRoles.add(selected.index);
-                continue;
+        for (const { role } of scored) {
+            usedRoleIds.add(role.id);
+            assignment[player.id] = role;
+
+            if (backtrack(playerIndex + 1)) {
+                return true;
             }
+
+            usedRoleIds.delete(role.id);
+            delete assignment[player.id];
         }
 
-        const topCandidates = scored.slice(0, Math.min(3, scored.length));
-        const selected = topCandidates[Math.floor(Math.random() * topCandidates.length)];
-        results[player.id] = selected.role;
-        assignedRoles.add(selected.index);
+        return false;
     }
 
-    return { results };
+    const success = backtrack(0);
+    return success ? assignment : null;
+}
+
+function validateRoomForLottery(room) {
+    if (room.roles.length !== room.players.length) {
+        return {
+            valid: false,
+            error: `人数不匹配：设置了 ${room.playerCount} 位玩家，但有 ${room.roles.length} 个角色。${room.roles.length < room.playerCount ? '角色不够' : '角色太多'}，请调整角色数量。`
+        };
+    }
+
+    if (room.players.length < room.playerCount) {
+        return {
+            valid: false,
+            error: `还差 ${room.playerCount - room.players.length} 位玩家，人齐后才能开始抽签。`
+        };
+    }
+
+    if (!room.allowCrossPlay) {
+        const maleRoles = room.roles.filter(r => r.gender === 'male').length;
+        const femaleRoles = room.roles.filter(r => r.gender === 'female').length;
+        const anyRoles = room.roles.filter(r => r.gender === 'any').length;
+        const malePlayers = room.players.filter(p => p.gender === 'male').length;
+        const femalePlayers = room.players.filter(p => p.gender === 'female').length;
+
+        const maleShort = Math.max(0, malePlayers - maleRoles);
+        const femaleShort = Math.max(0, femalePlayers - femaleRoles);
+
+        if (maleShort + femaleShort > anyRoles) {
+            return {
+                valid: false,
+                error: `性别匹配失败：有 ${malePlayers} 个男玩家但只有 ${maleRoles} 个男角色，有 ${femalePlayers} 个女玩家但只有 ${femaleRoles} 个女角色，"不限"角色仅 ${anyRoles} 个不足以补差。请开启反串或调整角色性别设置。`
+            };
+        }
+    }
+
+    const conflict = findFirstConflict(room);
+    if (conflict) {
+        const { player, genderBlocked, avoidBlockedReasons } = conflict;
+        let reasonStr = `玩家「${player.nickname}」没有可分配的角色：`;
+        const reasons = [];
+        if (genderBlocked) {
+            reasons.push(`性别不匹配（关闭反串后，所有角色的性别都不符合${player.gender === 'male' ? '男生' : '女生'}）`);
+        }
+        if (avoidBlockedReasons && avoidBlockedReasons.length > 0) {
+            avoidBlockedReasons.forEach(r => {
+                if (r.type === 'tag') {
+                    reasons.push(`设置了避开「${r.tag}」标签（共 ${r.count} 个角色）`);
+                }
+                if (r.type === 'role') {
+                    reasons.push(`设置了避开角色「${r.roleName}」`);
+                }
+            });
+        }
+        reasonStr += reasons.join('，') + '。请调整避开规则或开启反串。';
+        return { valid: false, error: reasonStr };
+    }
+
+    const assignment = backtrackAssign(room);
+    if (!assignment) {
+        return {
+            valid: false,
+            error: '角色分配无解：综合性别和避开规则后无法为每个人分配到符合条件的角色。请减少避开规则或开启反串。'
+        };
+    }
+
+    return { valid: true, assignment };
+}
+
+function assignRoles(room) {
+    const result = validateRoomForLottery(room);
+    if (!result.valid) {
+        return { error: result.error };
+    }
+    return { results: result.assignment };
 }
 
 app.post('/api/rooms', (req, res) => {
@@ -328,11 +402,6 @@ app.post('/api/rooms/:id/lottery', (req, res) => {
 
     if (room.players.length < room.playerCount) {
         return res.status(400).json({ error: `还差 ${room.playerCount - room.players.length} 位玩家` });
-    }
-
-    const genderValidation = validateGenderMatch(room);
-    if (!genderValidation.valid) {
-        return res.status(400).json({ error: genderValidation.message });
     }
 
     const assignResult = assignRoles(room);
