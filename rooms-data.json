@@ -1,4 +1,272 @@
 {
+  "160179": {
+    "id": "160179",
+    "scriptName": "测试房间v2",
+    "playerCount": 4,
+    "allowCrossPlay": true,
+    "roles": [
+      {
+        "id": 0,
+        "name": "大太太",
+        "gender": "female",
+        "tag": "🔥高能",
+        "costume": "可以穿得活泼鲜艳一些",
+        "line": "\"各位好，我是这个故事的见证者。\"",
+        "avatar": "🎭"
+      },
+      {
+        "id": 1,
+        "name": "二少爷",
+        "gender": "male",
+        "tag": "😂搞笑",
+        "costume": "可以尝试暗黑系风格",
+        "line": "\"真相，往往藏在最不起眼的地方。\"",
+        "avatar": "👑"
+      },
+      {
+        "id": 2,
+        "name": "管家",
+        "gender": "male",
+        "tag": "🔍推理",
+        "costume": "休闲风即可，舒适最重要",
+        "line": "\"让我们开始吧，时间不多了。\"",
+        "avatar": "🎨"
+      },
+      {
+        "id": 3,
+        "name": "厨子",
+        "gender": "any",
+        "tag": "😌边缘",
+        "costume": "甜美可爱风格最适合",
+        "line": "\"我知道你们都在想什么...\"",
+        "avatar": "🎪"
+      }
+    ],
+    "birthdayMessage": "生日快乐~永远18岁！",
+    "openingSlogan": "嗨起来！",
+    "surpriseTask": "大家一起唱生日歌",
+    "birthdayPlayerId": "p_8q59byxl",
+    "avoidRules": [
+      {
+        "type": "role",
+        "playerId": "p_jkp23a2g",
+        "avoidRoleId": 2
+      },
+      {
+        "type": "tag",
+        "playerId": "p_o9gyz9ys",
+        "avoidTag": "😌边缘"
+      }
+    ],
+    "lockedPlayers": [],
+    "players": [
+      {
+        "id": "p_jkp23a2g",
+        "nickname": "小明",
+        "preference": "detective",
+        "gender": "male",
+        "joinedAt": 1781893853889
+      },
+      {
+        "id": "p_8q59byxl",
+        "nickname": "小红",
+        "preference": "high-energy",
+        "gender": "female",
+        "joinedAt": 1781893853893
+      },
+      {
+        "id": "p_o9gyz9ys",
+        "nickname": "小刚",
+        "preference": "funny",
+        "gender": "male",
+        "joinedAt": 1781893853897
+      },
+      {
+        "id": "p_7bfsmgq9",
+        "nickname": "小美",
+        "preference": "emotional",
+        "gender": "female",
+        "joinedAt": 1781893853900
+      }
+    ],
+    "status": "finished",
+    "createdAt": 1781893853868,
+    "lotteryResults": {
+      "p_jkp23a2g": {
+        "id": 0,
+        "name": "大太太",
+        "gender": "female",
+        "tag": "🔥高能",
+        "costume": "可以穿得活泼鲜艳一些",
+        "line": "\"各位好，我是这个故事的见证者。\"",
+        "avatar": "🎭"
+      },
+      "p_o9gyz9ys": {
+        "id": 1,
+        "name": "二少爷",
+        "gender": "male",
+        "tag": "😂搞笑",
+        "costume": "可以尝试暗黑系风格",
+        "line": "\"真相，往往藏在最不起眼的地方。\"",
+        "avatar": "👑"
+      },
+      "p_8q59byxl": {
+        "id": 3,
+        "name": "厨子",
+        "gender": "any",
+        "tag": "😌边缘",
+        "costume": "甜美可爱风格最适合",
+        "line": "\"我知道你们都在想什么...\"",
+        "avatar": "🎪"
+      },
+      "p_7bfsmgq9": {
+        "id": 2,
+        "name": "管家",
+        "gender": "male",
+        "tag": "🔍推理",
+        "costume": "休闲风即可，舒适最重要",
+        "line": "\"让我们开始吧，时间不多了。\"",
+        "avatar": "🎨"
+      }
+    },
+    "creatorToken": "ct_0ye5i8d7rcf",
+    "redoCount": 1,
+    "finishedAt": 1781893853958
+  },
+  "226114": {
+    "id": "226114",
+    "scriptName": "测试房间v2",
+    "playerCount": 4,
+    "allowCrossPlay": true,
+    "roles": [
+      {
+        "id": 0,
+        "name": "大太太",
+        "gender": "female",
+        "tag": "🔥高能",
+        "costume": "建议穿国风元素的衣服",
+        "line": "\"你们可以叫我...一个过客。\"",
+        "avatar": "🎭"
+      },
+      {
+        "id": 1,
+        "name": "二少爷",
+        "gender": "male",
+        "tag": "😂搞笑",
+        "costume": "可以穿得活泼鲜艳一些",
+        "line": "\"来了？坐，好戏才刚刚开始。\"",
+        "avatar": "👑"
+      },
+      {
+        "id": 2,
+        "name": "管家",
+        "gender": "male",
+        "tag": "🔍推理",
+        "costume": "甜美可爱风格最适合",
+        "line": "\"我知道你们都在想什么...\"",
+        "avatar": "🎨"
+      },
+      {
+        "id": 3,
+        "name": "厨子",
+        "gender": "any",
+        "tag": "😌边缘",
+        "costume": "酷炫机车风了解一下",
+        "line": "\"真相，往往藏在最不起眼的地方。\"",
+        "avatar": "🎪"
+      }
+    ],
+    "birthdayMessage": "生日快乐~永远18岁！",
+    "openingSlogan": "嗨起来！",
+    "surpriseTask": "大家一起唱生日歌",
+    "birthdayPlayerId": "p_o7fgbqlj",
+    "avoidRules": [
+      {
+        "type": "role",
+        "playerId": "p_k4pmqtty",
+        "avoidRoleId": 2
+      },
+      {
+        "type": "tag",
+        "playerId": "p_0uspf9y5",
+        "avoidTag": "😌边缘"
+      }
+    ],
+    "lockedPlayers": [],
+    "players": [
+      {
+        "id": "p_k4pmqtty",
+        "nickname": "小明",
+        "preference": "detective",
+        "gender": "male",
+        "joinedAt": 1781893407801
+      },
+      {
+        "id": "p_o7fgbqlj",
+        "nickname": "小红",
+        "preference": "high-energy",
+        "gender": "female",
+        "joinedAt": 1781893407805
+      },
+      {
+        "id": "p_0uspf9y5",
+        "nickname": "小刚",
+        "preference": "funny",
+        "gender": "male",
+        "joinedAt": 1781893407809
+      },
+      {
+        "id": "p_xfgeeysa",
+        "nickname": "小美",
+        "preference": "emotional",
+        "gender": "female",
+        "joinedAt": 1781893407812
+      }
+    ],
+    "status": "finished",
+    "createdAt": 1781893407779,
+    "lotteryResults": {
+      "p_k4pmqtty": {
+        "id": 3,
+        "name": "厨子",
+        "gender": "any",
+        "tag": "😌边缘",
+        "costume": "酷炫机车风了解一下",
+        "line": "\"真相，往往藏在最不起眼的地方。\"",
+        "avatar": "🎪"
+      },
+      "p_0uspf9y5": {
+        "id": 1,
+        "name": "二少爷",
+        "gender": "male",
+        "tag": "😂搞笑",
+        "costume": "可以穿得活泼鲜艳一些",
+        "line": "\"来了？坐，好戏才刚刚开始。\"",
+        "avatar": "👑"
+      },
+      "p_o7fgbqlj": {
+        "id": 0,
+        "name": "大太太",
+        "gender": "female",
+        "tag": "🔥高能",
+        "costume": "建议穿国风元素的衣服",
+        "line": "\"你们可以叫我...一个过客。\"",
+        "avatar": "🎭"
+      },
+      "p_xfgeeysa": {
+        "id": 2,
+        "name": "管家",
+        "gender": "male",
+        "tag": "🔍推理",
+        "costume": "甜美可爱风格最适合",
+        "line": "\"我知道你们都在想什么...\"",
+        "avatar": "🎨"
+      }
+    },
+    "creatorToken": "ct_gvqgxgxd33v",
+    "redoCount": 1,
+    "finishedAt": 1781893407871
+  },
   "254619": {
     "id": "254619",
     "scriptName": "测试剧本",

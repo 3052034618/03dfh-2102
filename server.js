@@ -344,6 +344,7 @@ app.get('/api/rooms/:id', (req, res) => {
 app.post('/api/rooms/:id/join', (req, res) => {
     const room = rooms[req.params.id];
     if (!room) return res.status(404).json({ error: '房间不存在' });
+    if (room.status === 'finished') return res.status(400).json({ error: '房间已结束，请在查看结果处查看' });
     if (room.status !== 'waiting') return res.status(400).json({ error: '房间已开始抽签' });
     if (room.players.length >= room.playerCount) return res.status(400).json({ error: '房间人数已满' });
 
@@ -519,6 +520,88 @@ app.get('/api/rooms/:id/players', (req, res) => {
         lockedPlayers: room.lockedPlayers || [],
         status: room.status
     });
+});
+
+app.get('/api/surprises', (req, res) => {
+    const list = [];
+    for (const room of Object.values(rooms)) {
+        if (room.birthdayPlayerId && (room.status === 'lottery-done' || room.status === 'finished')) {
+            const bp = room.players.find(p => p.id === room.birthdayPlayerId);
+            list.push({
+                id: room.id,
+                scriptName: room.scriptName,
+                birthdayPlayer: bp ? bp.nickname : '未知',
+                message: room.birthdayMessage || '',
+                slogan: room.openingSlogan || '',
+                task: room.surpriseTask || '',
+                time: new Date(room.createdAt || Date.now()).toLocaleString('zh-CN')
+            });
+        }
+    }
+    list.sort((a, b) => b.id.localeCompare(a.id));
+    res.json(list);
+});
+
+app.get('/api/rooms/:id/surprise', (req, res) => {
+    const room = rooms[req.params.id];
+    if (!room) return res.status(404).json({ error: '房间不存在' });
+    if (!room.birthdayPlayerId) return res.status(404).json({ error: '该房间未设置生日彩蛋' });
+    const bp = room.players.find(p => p.id === room.birthdayPlayerId);
+    res.json({
+        id: room.id,
+        scriptName: room.scriptName,
+        birthdayPlayer: bp ? bp.nickname : '未知',
+        message: room.birthdayMessage || '',
+        slogan: room.openingSlogan || '',
+        task: room.surpriseTask || '',
+        time: new Date(room.createdAt || Date.now()).toLocaleString('zh-CN'),
+        status: room.status
+    });
+});
+
+app.post('/api/rooms/:id/finish', (req, res) => {
+    const room = rooms[req.params.id];
+    if (!room) return res.status(404).json({ error: '房间不存在' });
+    const { creatorToken } = req.body;
+    if (creatorToken !== room.creatorToken) return res.status(403).json({ error: '只有发起人可以结束房间' });
+    if (room.status !== 'lottery-done') return res.status(400).json({ error: '只有开奖后才能结束房间' });
+
+    room.status = 'finished';
+    room.finishedAt = Date.now();
+    saveData();
+    res.json({ success: true, room: getSafeRoom(room) });
+});
+
+app.get('/api/rooms/:id/export', (req, res) => {
+    const room = rooms[req.params.id];
+    if (!room) return res.status(404).json({ error: '房间不存在' });
+    if (!room.lotteryResults) return res.status(400).json({ error: '尚未开奖' });
+
+    const lines = [];
+    lines.push(`🎭 《${room.scriptName}》角色分配结果`);
+    lines.push(`📅 ${new Date(room.finishedAt || room.createdAt || Date.now()).toLocaleString('zh-CN')}`);
+    lines.push('');
+
+    const bp = room.players.find(p => p.id === room.birthdayPlayerId);
+    if (bp) {
+        lines.push(`🎂 寿星：${bp.nickname}`);
+        if (room.birthdayMessage) lines.push(`💌 祝福语：${room.birthdayMessage}`);
+        if (room.openingSlogan) lines.push(`📢 开场口号：${room.openingSlogan}`);
+        lines.push('');
+    }
+
+    for (const player of room.players) {
+        const role = room.lotteryResults[player.id];
+        if (!role) continue;
+        const isBp = player.id === room.birthdayPlayerId ? ' 🎂' : '';
+        const gender = player.gender === 'male' ? '♂' : '♀';
+        lines.push(`  ${gender} ${player.nickname}${isBp}  →  ${role.name} ${role.tag}`);
+    }
+
+    lines.push('');
+    lines.push('—— 生日快乐，玩得开心！🎉 ——');
+
+    res.json({ text: lines.join('\n') });
 });
 
 loadData();
